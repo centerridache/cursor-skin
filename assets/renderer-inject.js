@@ -7,7 +7,7 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 18;
+  const VERSION = 20;
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -188,10 +188,18 @@
       writeStoredMedia(nextImage, nextUrl, options.wallpaperLabel || "");
     }
 
+    const epoch = options.mediaEpoch ? String(options.mediaEpoch) : "";
     const mediaKey =
       (nextUrl ? "v:" : nextImage ? "i:" : "d:") +
-      (nextUrl || nextImage || (nextImage || nextUrl ? "" : imageDataUrl ? "default" : ""));
-    const sameMedia = existingKey === mediaKey && mediaKey !== "";
+      (epoch ? epoch + "|" : "") +
+      (nextUrl || nextImage || (imageDataUrl ? "default" : ""));
+    const videoBroken =
+      !!nextUrl &&
+      (!html.getAttribute("data-cds-video") ||
+        !video ||
+        video.readyState < 2 ||
+        (video.error && video.error.code));
+    const sameMedia = existingKey === mediaKey && mediaKey !== "" && !videoBroken;
 
     // Bundled default art only when no custom still/video (avoids theme-switch flash).
     if (nextImage || nextUrl) {
@@ -201,6 +209,7 @@
     }
 
     if (sameMedia) {
+      if (nextUrl) ensureVideoWatchdog();
       return root;
     }
     root.setAttribute("data-cds-media-key", mediaKey);
@@ -257,18 +266,39 @@
 
     if (nextUrl) {
       html.removeAttribute("data-cds-still");
-      const startVideo = function (src) {
+      video._cdsStreamUrl = nextUrl;
+
+      const setWallStatus = function (text) {
+        try {
+          const el = document.querySelector("#cursor-dream-skin-hud .cds-wall-name");
+          if (el && text) el.textContent = text;
+        } catch (_) {}
+      };
+
+      const startVideo = function (src, attempt) {
+        const tries = typeof attempt === "number" ? attempt : 0;
         video.onloadeddata = function () {
           if (video.videoWidth > 0) {
             html.setAttribute("data-cds-video", "1");
             const play = video.play();
             if (play && typeof play.catch === "function") play.catch(function () {});
+            if (options.wallpaperLabel) setWallStatus(options.wallpaperLabel);
           } else {
             html.removeAttribute("data-cds-video");
           }
         };
         video.onerror = function () {
           html.removeAttribute("data-cds-video");
+          // Electron rejects http(s) media src ("URL safety check"). Blob retry below handles that.
+          if (tries < 2 && video._cdsStreamUrl && String(src).indexOf("blob:") !== 0) {
+            fetchToBlobVideo(tries + 1);
+            return;
+          }
+          if (tries < 4 && video._cdsStreamUrl && String(src).indexOf("blob:") === 0) {
+            setTimeout(function () {
+              fetchToBlobVideo(tries + 1);
+            }, 800 * (tries + 1));
+          }
         };
         video.setAttribute("src", src);
         video.src = src;
@@ -278,7 +308,10 @@
         const play = video.play();
         if (play && typeof play.catch === "function") play.catch(function () {});
       };
-      if (/^https?:\/\/127\.0\.0\.1(?::\d+)?\//i.test(nextUrl)) {
+
+      const fetchToBlobVideo = function (attempt) {
+        const tries = typeof attempt === "number" ? attempt : 0;
+        setWallStatus("Loading video…");
         fetch(nextUrl)
           .then(function (r) {
             if (!r.ok) throw new Error("video fetch " + r.status);
@@ -290,16 +323,28 @@
             } catch (_) {}
             const obj = URL.createObjectURL(blob);
             video._cdsObjectUrl = obj;
-            startVideo(obj);
+            startVideo(obj, tries);
           })
-          .catch(function () {
-            startVideo(nextUrl);
+          .catch(function (e) {
+            setWallStatus("Video load failed — retry from panel");
+            try {
+              console.warn("[Dream Skin] video blob fail:", e && e.message ? e.message : e);
+            } catch (_) {}
+            if (tries < 3) {
+              setTimeout(function () {
+                fetchToBlobVideo(tries + 1);
+              }, 1000 * (tries + 1));
+            }
           });
-      } else {
-        startVideo(nextUrl);
-      }
+      };
+
+      // Cursor/Electron blocks <video src="http://127.0.0.1/..."> (URL safety check).
+      // Always materialize a blob: URL from the loopback Range server.
+      fetchToBlobVideo(0);
+      ensureVideoWatchdog();
     } else {
       html.removeAttribute("data-cds-video");
+      video._cdsStreamUrl = "";
       try {
         if (video._cdsObjectUrl) URL.revokeObjectURL(video._cdsObjectUrl);
       } catch (_) {}
@@ -314,6 +359,36 @@
       }
     }
     return root;
+  }
+
+  function ensureVideoWatchdog() {
+    if (global.__cdsVideoWatchdog) return;
+    global.__cdsVideoWatchdog = true;
+    const kick = function () {
+      try {
+        const html = document.documentElement;
+        if (html.getAttribute(MARK) !== "1") return;
+        const video = document.querySelector("#" + ROOT_ID + " .cds-video");
+        if (!video || !video.getAttribute("src")) return;
+        if (video.ended) {
+          try {
+            video.currentTime = 0;
+          } catch (_) {}
+        }
+        if (video.paused || video.ended || video.readyState < 2) {
+          const play = video.play();
+          if (play && typeof play.catch === "function") play.catch(function () {});
+        }
+        if (video.videoWidth > 0) html.setAttribute("data-cds-video", "1");
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    setInterval(kick, 2500);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") kick();
+    });
+    window.addEventListener("focus", kick);
   }
 
   let lastPaletteTokens =
@@ -992,7 +1067,7 @@
     const note = document.createElement("div");
     note.className = "cds-hud-note";
     note.textContent =
-      "WE folder OK · video auto · scene uses RePKG · big MP4 via blob";
+      "WE folder OK · video loads as blob (Electron blocks http media) · big files may take a minute";
     body.appendChild(note);
 
     hud.appendChild(body);
@@ -1000,7 +1075,7 @@
 
   function ensurePanel() {
     let hud = document.getElementById(HUD_ID);
-    if (hud && hud.getAttribute("data-cds-panel-v") !== "12") {
+    if (hud && hud.getAttribute("data-cds-panel-v") !== "13") {
       hud.remove();
       hud = null;
     }
@@ -1022,7 +1097,7 @@
     hud.id = HUD_ID;
     hud.className = "cds-panel-root";
     hud.setAttribute("data-cds-hud", "1");
-    hud.setAttribute("data-cds-panel-v", "12");
+    hud.setAttribute("data-cds-panel-v", "13");
     hud.setAttribute("data-collapsed", readCollapsed() ? "1" : "0");
 
     const chip = document.createElement("button");
@@ -1056,6 +1131,7 @@
       resetWallpaper: cfg.resetWallpaper === true,
       preserveCustomMedia: cfg.preserveCustomMedia !== false,
       wallpaperLabel: cfg.wallpaperLabel || "",
+      mediaEpoch: cfg.mediaEpoch || 0,
     });
     if (cfg.paletteTokens) lastPaletteTokens = cfg.paletteTokens;
     else if (cfg.paletteId === "") lastPaletteTokens = null;

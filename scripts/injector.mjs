@@ -350,10 +350,12 @@ function installWallpaper(stateDir, srcPath, displayName) {
 function installVideo(stateDir, srcPath, displayName) {
   if (!stateDir) throw new Error("stateDir required for video");
   const { resolved, ext, size } = assertSafeMediaFile(srcPath, { video: true });
+  // Serve the original file in place — copying 200MB+ WE packs made uploads feel dead
+  // and is unnecessary for a loopback media server.
   const dir = path.join(stateDir, "wallpapers");
   fs.mkdirSync(dir, { recursive: true });
   for (const name of fs.readdirSync(dir)) {
-    if (/^custom\./i.test(name)) {
+    if (/^custom\.(mp4|webm)$/i.test(name)) {
       try {
         fs.unlinkSync(path.join(dir, name));
       } catch {
@@ -361,12 +363,10 @@ function installVideo(stateDir, srcPath, displayName) {
       }
     }
   }
-  const dest = path.join(dir, `custom${ext}`);
-  fs.copyFileSync(resolved, dest);
   const meta = {
     kind: "video",
     sourcePath: resolved,
-    storedPath: dest,
+    storedPath: resolved,
     name: displayName || path.basename(resolved),
     mime: ext === ".webm" ? "video/webm" : "video/mp4",
     size,
@@ -446,9 +446,14 @@ function resetWallpaper(stateDir) {
 }
 
 async function ensureMediaForMeta(meta) {
-  mediaServer.close();
-  if (!meta || !meta.storedPath) return "";
-  if (!fs.existsSync(meta.storedPath)) return "";
+  if (!meta || !meta.storedPath) {
+    mediaServer.close();
+    return "";
+  }
+  if (!fs.existsSync(meta.storedPath)) {
+    mediaServer.close();
+    return "";
+  }
   const ext = path.extname(meta.storedPath).toLowerCase();
   const mime =
     meta.mime ||
@@ -457,7 +462,9 @@ async function ensureMediaForMeta(meta) {
         ? "video/webm"
         : "video/mp4"
       : mimeForExt(ext));
+  // Reuses existing server+token when the same file is already mounted.
   const started = await mediaServer.start(meta.storedPath, mime);
+  if (started.reused) log(`media reuse ${path.basename(meta.storedPath)}`);
   return started.url;
 }
 
@@ -525,6 +532,7 @@ async function applyWallpaperPath(stateDir, themeDir, filePath, displayName) {
     videoUrl,
     imageUrl,
     wallpaperLabel: meta.name || label,
+    mediaEpoch: Date.now(),
   };
 }
 
@@ -829,11 +837,14 @@ async function main() {
   let wallpaperLabel = wallMeta?.name || "Default";
   let videoUrl = "";
   let imageUrl = "";
+  let mediaEpoch = 0;
   try {
     if (wallMeta?.kind === "video") {
       videoUrl = await ensureMediaForMeta(wallMeta);
+      mediaEpoch = Date.now();
     } else if (wallMeta?.kind === "image") {
       imageUrl = await ensureMediaForMeta(wallMeta);
+      mediaEpoch = Date.now();
     }
   } catch (e) {
     log(`media server fail: ${e.message || e}`);
@@ -873,6 +884,7 @@ async function main() {
     wallpaperLabel,
     videoUrl,
     imageUrl,
+    mediaEpoch,
   };
   const results = [];
   for (const t of pages) {
@@ -1019,6 +1031,7 @@ async function main() {
                   videoUrl = applied.videoUrl;
                   imageUrl = applied.imageUrl;
                   wallpaperLabel = applied.wallpaperLabel;
+                  mediaEpoch = applied.mediaEpoch || Date.now();
                   needFullReapply = true;
                   log(
                     `${applied.meta.kind} -> ${wallpaperLabel} (${applied.meta.size} bytes)`
@@ -1048,6 +1061,7 @@ async function main() {
                     videoUrl = applied.videoUrl;
                     imageUrl = applied.imageUrl;
                     wallpaperLabel = applied.wallpaperLabel;
+                    mediaEpoch = applied.mediaEpoch || Date.now();
                     needFullReapply = true;
                     log(
                       `wallpaper-browse -> ${wallpaperLabel} (${applied.meta.size} bytes)`
@@ -1067,6 +1081,7 @@ async function main() {
                   videoUrl = "";
                   imageUrl = await ensureMediaForMeta(meta);
                   wallpaperLabel = meta.name || "Custom";
+                  mediaEpoch = Date.now();
                   needFullReapply = true;
                   log(`wallpaper-data -> ${wallpaperLabel} (${meta.size} bytes)`);
                 } catch (e) {
@@ -1078,6 +1093,7 @@ async function main() {
                 videoUrl = "";
                 imageUrl = "";
                 wallpaperLabel = "Default";
+                mediaEpoch = Date.now();
                 needFullReapply = true;
                 log("wallpaper -> Default");
               }
@@ -1091,6 +1107,7 @@ async function main() {
                 wallpaperLabel,
                 videoUrl,
                 imageUrl,
+                mediaEpoch,
                 resetWallpaper: !videoUrl && !imageUrl && wallpaperLabel === "Default",
               });
             }
@@ -1117,6 +1134,7 @@ async function main() {
             wallpaperLabel,
             videoUrl,
             imageUrl,
+            mediaEpoch,
           });
         }
       }

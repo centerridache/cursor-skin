@@ -33,14 +33,23 @@ export function createMediaServer() {
     return `http://127.0.0.1:${port}/media?token=${encodeURIComponent(token)}`;
   }
 
+  function servingPath() {
+    return filePath || "";
+  }
+
   function start(absPath, contentType) {
-    close();
     const resolved = path.resolve(absPath);
     if (!fs.existsSync(resolved)) {
       throw new Error(`media file missing: ${resolved}`);
     }
+    const nextMime = contentType || "video/mp4";
+    // Reuse the same loopback URL/token when the file is unchanged — avoids killing in-flight video.
+    if (server && port && token && filePath === resolved && mime === nextMime) {
+      return Promise.resolve({ url: url(), port, token, reused: true });
+    }
+    close();
     filePath = resolved;
-    mime = contentType || "video/mp4";
+    mime = nextMime;
     token = crypto.randomBytes(16).toString("hex");
 
     server = http.createServer((req, res) => {
@@ -73,9 +82,11 @@ export function createMediaServer() {
 
         res.setHeader("Accept-Ranges", "bytes");
         res.setHeader("Content-Type", mime);
-        res.setHeader("Cache-Control", "no-store");
+        // Allow the renderer to keep a long-lived Range stream without revalidating every chunk.
+        res.setHeader("Cache-Control", "private, max-age=3600");
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Expose-Headers", "Content-Range, Accept-Ranges, Content-Length");
 
         if (req.method === "OPTIONS") {
           res.writeHead(204);
@@ -142,5 +153,5 @@ export function createMediaServer() {
     });
   }
 
-  return { start, close, url, get port() { return port; } };
+  return { start, close, url, servingPath, get port() { return port; } };
 }

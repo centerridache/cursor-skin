@@ -165,15 +165,15 @@ html[data-cursor-dream-skin="1"] [class*="glass-sidebar-docked"] {
   box-shadow: none !important;
 }
 
-/* Right editor / chat panel 鈥?was solid rgb(); frost so wallpaper shows */
+/* Right editor / Browser / chat column — tint only, NO backdrop blur (blur wrecks webviews) */
 html[data-cursor-dream-skin="1"] .editor-panel-container,
 html[data-cursor-dream-skin="1"] [class*="editor-panel-container"],
 html[data-cursor-dream-skin="1"] [class*="editor-panel"][class*="glass-"],
 html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
   background-color: var(--cds-editor-panel) !important;
   background-image: none !important;
-  backdrop-filter: var(--cds-frost) !important;
-  -webkit-backdrop-filter: var(--cds-frost) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   border-left: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
 }
@@ -401,8 +401,8 @@ html[data-cursor-dream-skin="1"] .monaco-workbench .part.activitybar {
 
 html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
   background-color: color-mix(in srgb, var(--vscode-sideBar-background, #1e1e2e) calc(var(--cds-veil-auxiliary) * 100%), transparent) !important;
-  backdrop-filter: var(--cds-frost);
-  -webkit-backdrop-filter: var(--cds-frost);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html[data-cursor-dream-skin="1"] .monaco-workbench .part.editor,
