@@ -1,0 +1,18 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+.env
+.env.*
+
+# Local / debug artifacts
+docs/*.png
+op.lock
+
+# Optional WE unpack cache if ever stored in-repo
+we-extract/
+**/wallpapers/
+
+# Redundant archive (binary is enough for WE scene unpack)
+tools/RePKG.zip
