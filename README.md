@@ -7,6 +7,12 @@
 > 非官方项目，与 Anysphere / Cursor 无关。  
 > Idea & UX inspired by [Codex Dream Skin](https://github.com/Fei-Away/Codex-Dream-Skin) — see [Credits](#credits--acknowledgements).
 
+## Status
+
+**目前处于测试阶段（early / WIP）。** API、选择器、面板和启动方式都可能随 Cursor 更新而失效或改动，欢迎提 Issue / PR，但请先用测试窗试用，并自行承担风险。
+
+做这个项目的原因很简单：看过 Codex 上的 Dream Skin 之后，想在 Cursor 里也有类似体验，搜了一圈发现几乎没有现成的「cursor-skin」一类工具，就用 AI 一起把这条路跑通了。Cursor 用户量不如一些大众编辑器，但手里天天开着它的人并不少——希望能帮到同样想给工作区加一点氛围的人。
+
 ---
 
 ## Features
