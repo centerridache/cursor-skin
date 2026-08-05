@@ -26,7 +26,7 @@
 ## Quick start
 
 ```powershell
-git clone https://github.com/<you>/cursor-skin.git
+git clone https://github.com/centerridache/cursor-skin.git
 cd cursor-skin
 powershell -NoProfile -File scripts\install-launchers.ps1
 ```
