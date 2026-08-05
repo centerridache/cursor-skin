@@ -7,7 +7,7 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 20;
+  const VERSION = 21;
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -193,12 +193,15 @@
       (nextUrl ? "v:" : nextImage ? "i:" : "d:") +
       (epoch ? epoch + "|" : "") +
       (nextUrl || nextImage || (imageDataUrl ? "default" : ""));
+    // Only remount on hard failure — readyState dips during 4K decode and must NOT reload the blob.
+    const hasBlob =
+      !!(video && video._cdsObjectUrl) ||
+      !!(video && video.src && String(video.src).indexOf("blob:") === 0);
     const videoBroken =
       !!nextUrl &&
-      (!html.getAttribute("data-cds-video") ||
-        !video ||
-        video.readyState < 2 ||
-        (video.error && video.error.code));
+      (!!video?.error ||
+        (!hasBlob && !html.getAttribute("data-cds-video")) ||
+        (hasBlob && video.error));
     const sameMedia = existingKey === mediaKey && mediaKey !== "" && !videoBroken;
 
     // Bundled default art only when no custom still/video (avoids theme-switch flash).
@@ -209,7 +212,15 @@
     }
 
     if (sameMedia) {
-      if (nextUrl) ensureVideoWatchdog();
+      if (nextUrl) {
+        ensureVideoWatchdog();
+        try {
+          if (video && video.paused) {
+            const play = video.play();
+            if (play && typeof play.catch === "function") play.catch(function () {});
+          }
+        } catch (_) {}
+      }
       return root;
     }
     root.setAttribute("data-cds-media-key", mediaKey);
@@ -312,6 +323,16 @@
       const fetchToBlobVideo = function (attempt) {
         const tries = typeof attempt === "number" ? attempt : 0;
         setWallStatus("Loading video…");
+        // Keep current frame visible while the new blob downloads (avoids white flash).
+        try {
+          if (video.videoWidth > 1) {
+            const c = document.createElement("canvas");
+            c.width = video.videoWidth;
+            c.height = video.videoHeight;
+            c.getContext("2d").drawImage(video, 0, 0);
+            video.setAttribute("poster", c.toDataURL("image/jpeg", 0.72));
+          }
+        } catch (_) {}
         fetch(nextUrl)
           .then(function (r) {
             if (!r.ok) throw new Error("video fetch " + r.status);
@@ -364,18 +385,68 @@
   function ensureVideoWatchdog() {
     if (global.__cdsVideoWatchdog) return;
     global.__cdsVideoWatchdog = true;
+    let repairing = false;
+
+    const freezeFrame = function (video) {
+      try {
+        if (!video || video.videoWidth < 2) return;
+        const c = document.createElement("canvas");
+        c.width = video.videoWidth;
+        c.height = video.videoHeight;
+        c.getContext("2d").drawImage(video, 0, 0);
+        video.setAttribute("poster", c.toDataURL("image/jpeg", 0.72));
+      } catch (_) {
+        /* ignore */
+      }
+    };
+
+    const softRepair = function (video) {
+      if (repairing) return;
+      const url = video && video._cdsStreamUrl;
+      if (!url) return;
+      repairing = true;
+      freezeFrame(video);
+      fetch(url)
+        .then(function (r) {
+          if (!r.ok) throw new Error("repair fetch " + r.status);
+          return r.blob();
+        })
+        .then(function (blob) {
+          try {
+            if (video._cdsObjectUrl) URL.revokeObjectURL(video._cdsObjectUrl);
+          } catch (_) {}
+          const obj = URL.createObjectURL(blob);
+          video._cdsObjectUrl = obj;
+          video.src = obj;
+          video.load();
+          const play = video.play();
+          if (play && typeof play.catch === "function") play.catch(function () {});
+          document.documentElement.setAttribute("data-cds-video", "1");
+        })
+        .catch(function () {
+          /* leave poster up */
+        })
+        .then(function () {
+          repairing = false;
+        });
+    };
+
     const kick = function () {
       try {
         const html = document.documentElement;
         if (html.getAttribute(MARK) !== "1") return;
         const video = document.querySelector("#" + ROOT_ID + " .cds-video");
         if (!video || !video.getAttribute("src")) return;
+        if (video.error) {
+          softRepair(video);
+          return;
+        }
         if (video.ended) {
           try {
             video.currentTime = 0;
           } catch (_) {}
         }
-        if (video.paused || video.ended || video.readyState < 2) {
+        if (video.paused || video.ended) {
           const play = video.play();
           if (play && typeof play.catch === "function") play.catch(function () {});
         }
@@ -384,7 +455,7 @@
         /* ignore */
       }
     };
-    setInterval(kick, 2500);
+    setInterval(kick, 4000);
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") kick();
     });

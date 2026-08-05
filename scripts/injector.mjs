@@ -29,7 +29,7 @@ function parseArgs(argv) {
     themeDir: path.join(ROOT, "assets"),
     stateDir: "",
     settingsPath: "",
-    pollMs: 1500,
+    pollMs: 4000,
     once: false,
     remove: false,
     verify: false,
@@ -605,10 +605,13 @@ function buildApplyExpression(payload, config) {
 }
 
 function buildDrainExpression(payload) {
+  // Avoid re-eval every poll tick — that churn can hitch the renderer / video decoder.
   return `(() => {
     try {
-      const src = ${JSON.stringify(payload)};
-      (0, eval)(src);
+      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.drainRequests !== "function") {
+        const src = ${JSON.stringify(payload)};
+        (0, eval)(src);
+      }
       if (!window.__cursorDreamSkin || !window.__cursorDreamSkin.drainRequests) return [];
       return window.__cursorDreamSkin.drainRequests();
     } catch (e) {
@@ -661,9 +664,15 @@ function buildRemoveExpression(payload) {
 
 function buildProbeExpression(payload) {
   return `(() => {
-    const src = ${JSON.stringify(payload)};
-    (0, eval)(src);
-    return window.__cursorDreamSkin.probe();
+    try {
+      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.probe !== "function") {
+        const src = ${JSON.stringify(payload)};
+        (0, eval)(src);
+      }
+      return window.__cursorDreamSkin.probe();
+    } catch (e) {
+      return { ok: false, error: String(e && e.message || e) };
+    }
   })()`;
 }
 
@@ -932,6 +941,7 @@ async function main() {
   }
 
   const seen = new Map();
+  const missStreak = new Map(); // targetId -> consecutive failed probes
   for (const t of pages) seen.set(t.id, Date.now());
 
   log(`watching every ${args.pollMs}ms (Ctrl+C to stop)`);
@@ -1120,12 +1130,27 @@ async function main() {
         if (!needs) {
           try {
             const probe = await injectTarget(t, args.port, themeBundle, "verify");
-            needs = !probe?.skinActive || !probe?.rootPresent || !probe?.hudPresent;
+            const healthy =
+              probe?.skinActive && probe?.rootPresent && probe?.hudPresent;
+            if (healthy) {
+              missStreak.set(t.id, 0);
+            } else {
+              const n = (missStreak.get(t.id) || 0) + 1;
+              missStreak.set(t.id, n);
+              // Require a few misses — one CDP glitch must not remount a 4K blob (white flash).
+              needs = n >= 3;
+              if (n === 1 || n === 2) {
+                log(`probe soft-miss ${t.id} streak=${n}`);
+              }
+            }
           } catch {
-            needs = true;
+            const n = (missStreak.get(t.id) || 0) + 1;
+            missStreak.set(t.id, n);
+            needs = n >= 3;
           }
         }
         if (needs) {
+          missStreak.set(t.id, 0);
           log(`re-apply ${t.id}${isNew ? " (new)" : ""}`);
           await injectTarget(t, args.port, themeBundle, "apply", {
             themeId: currentThemeId,
