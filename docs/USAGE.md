@@ -1,4 +1,6 @@
-# Cursor Dream Skin — 使用说明
+# Cursor Dream Skin / cursor-skin — 使用说明
+
+仓库名：**cursor-skin**。面板与快捷方式里仍显示 Dream Skin。
 
 ## 一句话
 

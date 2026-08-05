@@ -2,17 +2,16 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
-*.tmp
-.env
-.env.*
 
-# Local / debug artifacts
-docs/*.png
-op.lock
+# Local probe / UI check screenshots (not for release)
+docs/*-check.png
+docs/final-check.png
+docs/hud-*.png
+docs/layer-check.png
+docs/panel-check.png
+docs/suggestions-check.png
 
-# Optional WE unpack cache if ever stored in-repo
-we-extract/
-**/wallpapers/
-
-# Redundant archive (binary is enough for WE scene unpack)
+# Large optional binaries — document download in tools/README.md
 tools/RePKG.zip
+tools/**/*.exe
+tools/**/*.dll
