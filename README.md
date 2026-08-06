@@ -13,6 +13,12 @@
 
 做这个项目的原因很简单：看过 Codex 上的 Dream Skin 之后，想在 Cursor 里也有类似体验，搜了一圈发现几乎没有现成的「cursor-skin」一类工具，就用 AI 一起把这条路跑通了。Cursor 用户量不如一些大众编辑器，但手里天天开着它的人并不少——希望能帮到同样想给工作区加一点氛围的人。
 
+### Known issues（当前已知）
+
+- **Agents Terminal（PowerShell 等）**：为透出壁纸开启了 xterm 透明背景，部分环境下字体可能发虚、对比度不够清晰。
+- **Agents Browser**：暂不做内容区透明化（原生 WebContentsView / 网页本身不透明）；只保证面板能正常打开网页，不追求壁纸透出。
+- 同时只应运行 **一个** injector；多开会互相抢注入，导致布局异常。
+
 ---
 
 ## Features

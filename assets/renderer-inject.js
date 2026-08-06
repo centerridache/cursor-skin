@@ -7,7 +7,7 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 21;
+  const VERSION = 28;
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -524,10 +524,12 @@
     const t = Math.min(100, Math.max(0, level)) / 100;
     return {
       side: 0.04 + t * 0.48,
-      editor: 0.05 + t * 0.5,
+      // Keep right column light so wallpaper stays visible under Terminal/Changes
+      editor: 0.06 + t * 0.36,
+      tool: 0.1 + t * 0.4,
       veilSide: 0.05 + t * 0.5,
       veilAux: 0.05 + t * 0.45,
-      veilEditor: 0.08 + t * 0.52,
+      veilEditor: 0.06 + t * 0.4,
       veilComposer: 0.04 + t * 0.4,
       float: 0.14 + t * 0.4,
     };
@@ -562,6 +564,10 @@
       );
     }
     html.style.setProperty(
+      "--cds-tool-surface",
+      dark ? "rgba(8, 10, 14, " + a.tool + ")" : "rgba(248, 250, 252, " + a.tool + ")"
+    );
+    html.style.setProperty(
       "--cds-float",
       dark ? "rgba(12, 14, 22, " + a.float + ")" : "rgba(18, 22, 34, " + a.float + ")"
     );
@@ -590,6 +596,171 @@
     if (accent) html.style.setProperty("--cds-accent", accent);
     if (border) html.style.setProperty("--cds-float-border", border);
     html.setAttribute("data-cds-palette", "1");
+  }
+
+  function syncToolPaneMark() {
+    try {
+      const html = document.documentElement;
+      const active = document.querySelector(
+        ".editor-panel-container [role='tab'][aria-selected='true'], [class*='editor-panel-container'] [role='tab'][aria-selected='true']"
+      );
+      const text = ((active && active.textContent) || "").toLowerCase().replace(/\s+/g, " ");
+      let mode = "";
+      if (/browser/.test(text)) mode = "browser";
+      else if (/powershell|terminal|cmd|pwsh/.test(text)) mode = "terminal";
+      if (mode) html.setAttribute("data-cds-tool-pane", mode);
+      else html.removeAttribute("data-cds-tool-pane");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function findXtermInstance() {
+    const root = document.querySelector(".xterm");
+    if (!root) return null;
+    let el = root;
+    while (el) {
+      try {
+        const keys = Object.keys(el);
+        for (let i = 0; i < keys.length; i++) {
+          const v = el[keys[i]];
+          if (v && typeof v === "object" && v.options && typeof v.write === "function") {
+            return v;
+          }
+        }
+      } catch (_) {}
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /** Make Agents terminal canvas draw a transparent background so wallpaper shows. */
+  function frostTerminalSurface() {
+    try {
+      const term = findXtermInstance();
+      if (!term || !term.options) return;
+      const nextBg = "#00000000";
+      const theme = Object.assign({}, term.options.theme || {}, { background: nextBg });
+      let changed = false;
+      if (!term.options.allowTransparency) {
+        term.options.allowTransparency = true;
+        changed = true;
+      }
+      const prevBg = term.options.theme && term.options.theme.background;
+      if (prevBg !== nextBg) {
+        term.options.theme = theme;
+        changed = true;
+      }
+      const colors =
+        term._core && term._core._themeService && term._core._themeService._colors;
+      if (colors && colors.background) {
+        if (colors.background.css !== nextBg) {
+          colors.background.css = nextBg;
+          colors.background.rgba = 0x00000000;
+          changed = true;
+        }
+        try {
+          if (term._core._themeService._onChangeColors && term._core._themeService._onChangeColors.fire) {
+            term._core._themeService._onChangeColors.fire(colors);
+          }
+        } catch (_) {}
+      }
+      if (changed) {
+        try {
+          term.refresh(0, Math.max(0, (term.rows || 1) - 1));
+        } catch (_) {}
+        try {
+          if (term._core && term._core._renderService && term._core._renderService.refreshRows) {
+            term._core._renderService.refreshRows(0, Math.max(0, (term.rows || 1) - 1));
+          }
+        } catch (_) {}
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function healToolPaneDamage() {
+    try {
+      document
+        .querySelectorAll(
+          '[data-component="terminal-tab-content"], [data-component="browser-tab-content"]'
+        )
+        .forEach(function (host) {
+          if (!host || !host.style) return;
+          // Old injectors forced overflow/flex/absolute webview sizing and
+          // blew terminal hosts to 50kpx tall — strip those leftovers only.
+          host.style.removeProperty("overflow");
+          host.style.removeProperty("min-height");
+          host.style.removeProperty("position");
+          host.style.removeProperty("flex");
+          host.style.removeProperty("isolation");
+          host.style.removeProperty("background");
+          host.style.removeProperty("background-color");
+        });
+      document.querySelectorAll("webview").forEach(function (wv) {
+        if (!wv) return;
+        const st = String(wv.getAttribute("style") || "");
+        if (/position:\s*absolute/i.test(st) || /important/i.test(st)) {
+          wv.removeAttribute("style");
+          wv.removeAttribute("width");
+          wv.removeAttribute("height");
+        }
+      });
+      document.querySelectorAll(".webview-browser-container").forEach(function (el) {
+        if (!el || !el.style) return;
+        const st = String(el.getAttribute("style") || "");
+        if (/opacity:\s*1\s*!important/i.test(st) || /z-index:\s*20\s*!important/i.test(st)) {
+          el.style.removeProperty("opacity");
+          el.style.removeProperty("pointer-events");
+          el.style.removeProperty("z-index");
+          el.style.removeProperty("visibility");
+        }
+      });
+      frostTerminalSurface();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function ensureToolPaneWatch() {
+    const gen = VERSION;
+    global.__cdsToolPaneGen = gen;
+    // Disable any older injector loops that still call sizeToolWebviews.
+    global.__cdsToolPaneWatch = gen;
+    if (global.__cdsToolPaneWatchTimer) {
+      try {
+        clearInterval(global.__cdsToolPaneWatchTimer);
+      } catch (_) {}
+      global.__cdsToolPaneWatchTimer = null;
+    }
+    if (global.__cdsToolPaneShieldTimer) {
+      try {
+        clearInterval(global.__cdsToolPaneShieldTimer);
+      } catch (_) {}
+      global.__cdsToolPaneShieldTimer = null;
+    }
+    if (global.__cdsToolPaneClickHandler) {
+      try {
+        document.removeEventListener("click", global.__cdsToolPaneClickHandler, true);
+      } catch (_) {}
+      global.__cdsToolPaneClickHandler = null;
+    }
+    const kick = function () {
+      if (global.__cdsToolPaneGen !== gen) return;
+      syncToolPaneMark();
+      healToolPaneDamage();
+    };
+    global.__cdsToolPaneClickHandler = kick;
+    document.addEventListener("click", kick, true);
+    // Fast shield: older injectors left setIntervals we cannot clearInterval
+    // (no stored ids). Undo their layout mutations until those loops die.
+    global.__cdsToolPaneShieldTimer = setInterval(function () {
+      if (global.__cdsToolPaneGen !== gen) return;
+      healToolPaneDamage();
+    }, 200);
+    global.__cdsToolPaneWatchTimer = setInterval(kick, 2500);
+    kick();
   }
 
   function tagFloatingChrome() {
@@ -1221,6 +1392,9 @@
     applyFrostLevel(frostLevel);
     tagFloatingChrome();
     syncTitleBarVars();
+    healToolPaneDamage();
+    ensureToolPaneWatch();
+    syncToolPaneMark();
     try {
       ensurePanel();
       setPanelActive();

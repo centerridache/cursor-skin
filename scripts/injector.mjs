@@ -776,6 +776,56 @@ function writeState(stateDir, data) {
   );
 }
 
+function injectorLockPath(stateDir) {
+  return path.join(stateDir, "injector.pid");
+}
+
+function processAlive(pid) {
+  if (!pid || !Number.isFinite(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** One daemon per stateDir — multiple injectors caused layout thrash / reload storms. */
+function acquireInjectorLock(stateDir) {
+  if (!stateDir) return;
+  fs.mkdirSync(stateDir, { recursive: true });
+  const lockFile = injectorLockPath(stateDir);
+  const existing = readJsonSafe(lockFile);
+  const oldPid = existing && Number(existing.pid);
+  if (oldPid && oldPid !== process.pid && processAlive(oldPid)) {
+    console.error(
+      `[Dream Skin] another injector is already running (pid ${oldPid}). Stop it first.`
+    );
+    process.exit(1);
+  }
+  fs.writeFileSync(
+    lockFile,
+    JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }, null, 2) + "\n"
+  );
+  const release = () => {
+    try {
+      const cur = readJsonSafe(lockFile);
+      if (cur && Number(cur.pid) === process.pid) fs.unlinkSync(lockFile);
+    } catch {
+      /* ignore */
+    }
+  };
+  process.on("exit", release);
+  process.on("SIGINT", () => {
+    release();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    release();
+    process.exit(0);
+  });
+}
+
 async function markAllPages(list, port, themeBundle, appearance) {
   for (const page of list) {
     try {
@@ -838,6 +888,9 @@ async function main() {
   if (args.stateDir) {
     fs.mkdirSync(args.stateDir, { recursive: true });
     globalThis.__cdsLogPath = path.join(args.stateDir, "injector.log");
+    if (!args.once && !args.verify && !args.remove) {
+      acquireInjectorLock(args.stateDir);
+    }
   }
 
   const wallMeta = loadActiveWallpaperPath(args.stateDir);

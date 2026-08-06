@@ -13,7 +13,8 @@ html[data-cursor-dream-skin="1"] {
   --cds-float-fg: rgba(255, 255, 255, 0.92);
   --cds-float-muted: rgba(255, 255, 255, 0.62);
   --cds-sidebar: rgba(12, 16, 28, 0.22);
-  --cds-editor-panel: rgba(18, 22, 34, 0.26);
+  --cds-editor-panel: rgba(18, 22, 34, 0.22);
+  --cds-tool-surface: rgba(10, 12, 18, 0.28);
   --cds-accent: #6ea8ff;
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
   /* Classic IDE veil strengths — kept light so wallpaper shows through */
@@ -35,7 +36,8 @@ html[data-cursor-dream-skin="1"][data-cds-scheme="dark"] {
   --cds-float-strong: rgba(12, 14, 22, 0.58);
   --cds-float-border: rgba(255, 255, 255, 0.12);
   --cds-sidebar: rgba(8, 10, 18, 0.28);
-  --cds-editor-panel: rgba(12, 14, 22, 0.28);
+  --cds-editor-panel: rgba(12, 14, 22, 0.24);
+  --cds-tool-surface: rgba(8, 10, 14, 0.3);
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -46,6 +48,7 @@ html[data-cursor-dream-skin="1"][data-cds-scheme="light"] {
   --cds-float-border: rgba(255, 255, 255, 0.16);
   --cds-sidebar: rgba(255, 255, 255, 0.16);
   --cds-editor-panel: rgba(255, 255, 255, 0.28);
+  --cds-tool-surface: rgba(248, 250, 252, 0.32);
 }
 
 html[data-cursor-dream-skin="1"] body {
@@ -165,12 +168,10 @@ html[data-cursor-dream-skin="1"] [class*="glass-sidebar-docked"] {
   box-shadow: none !important;
 }
 
-/* Right editor / Browser / chat column — tint only, NO backdrop blur (blur wrecks webviews) */
+/* Right editor column — same clarity as main canvas (tint only, no stacked blur) */
 html[data-cursor-dream-skin="1"] .editor-panel-container,
-html[data-cursor-dream-skin="1"] [class*="editor-panel-container"],
-html[data-cursor-dream-skin="1"] [class*="editor-panel"][class*="glass-"],
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
-  background-color: var(--cds-editor-panel) !important;
+html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] {
+  background-color: transparent !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -178,19 +179,72 @@ html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
   box-shadow: none !important;
 }
 
-/* Nested Agents panes inside the right column often paint solid plates */
-html[data-cursor-dream-skin="1"] .editor-panel-container > div,
-html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] > div,
-html[data-cursor-dream-skin="1"] .editor-panel-container [class*="glass-"][style*="background"],
-html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] [class*="scrollable"] {
+html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
   background-color: transparent !important;
   background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-left: 1px solid var(--cds-float-border) !important;
+  box-shadow: none !important;
 }
 
-/* Kill leftover solid fills that sit over the wallpaper on the right */
+/* Terminal / Browser: keep hosts clear (xterm canvas transparency is JS-driven) */
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] .editor-panel-container,
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] .editor-panel-container,
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [class*="editor-panel-container"],
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [class*="editor-panel-container"] {
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-cursor-dream-skin="1"] {
+  --vscode-terminal-background: transparent !important;
+  --vscode-panel-background: transparent !important;
+  --vscode-editorPane-background: transparent !important;
+}
+
+/* Kill Cursor's solid #141414 plates around Agents terminal */
+html[data-cursor-dream-skin="1"] [data-component="terminal-tab-content"],
+html[data-cursor-dream-skin="1"] [data-component="terminal-tab-content"] div,
+html[data-cursor-dream-skin="1"] [data-component="browser-tab-content"],
+html[data-cursor-dream-skin="1"] [data-component="browser-tab-content"] div,
+html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-terminal"],
+html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-browser"],
+html[data-cursor-dream-skin="1"] .glass-terminal-container,
+html[data-cursor-dream-skin="1"] .terminal-wrapper,
+html[data-cursor-dream-skin="1"] .xterm-wrapper,
+html[data-cursor-dream-skin="1"] .xterm,
+html[data-cursor-dream-skin="1"] .xterm-viewport,
+html[data-cursor-dream-skin="1"] .xterm-screen {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+html[data-cursor-dream-skin="1"] .editor-panel-container > hr,
+html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] > hr {
+  background-color: transparent !important;
+}
+
+/* Diff / Changes — match main canvas: clear, no milky blur stack */
+html[data-cursor-dream-skin="1"] .diff-tab-content,
+html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-stable-diff"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/*
+ * NEVER style .webview-browser-container / webview guests here.
+ * Cursor sets opacity:0;pointer-events:none on the stub while a native
+ * WebContentsView paints the real Terminal/Browser. Overriding that
+ * (or covering it with opaque hosts) yields a black empty pane.
+ */
+
 html[data-cursor-dream-skin="1"][data-cds-palette="1"] .editor-panel-container,
 html[data-cursor-dream-skin="1"][data-cds-palette="1"] [class*="editor-panel-container"] {
-  background-color: var(--cds-editor-panel) !important;
+  background-color: transparent !important;
 }
 
 html[data-cursor-dream-skin="1"] .glass-sidebar-header-actions-stack,
