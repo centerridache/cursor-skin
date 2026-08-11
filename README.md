@@ -1,54 +1,129 @@
-# cursor-skin
+# Cursor Skin
 
-给 **Cursor** 桌面端换氛围壁纸与毛玻璃 UI 的 Windows 小工具。
+让 Cursor 活起来。
 
-通过本机 CDP（Chrome DevTools Protocol）注入，**不修改** `Cursor.exe` / `app.asar`，可随时还原。
+一个轻量级的 **Cursor 动态皮肤引擎**：在 IDE 里叠上动态壁纸、透明与毛玻璃 UI、主题包——**不修改** Cursor 安装文件，也不另起一套壁纸进程。
+
+![Cursor Skin demo](docs/media/demo.gif)
 
 > 非官方项目，与 Anysphere / Cursor 无关。  
-> Idea & UX inspired by [Codex Dream Skin](https://github.com/Fei-Away/Codex-Dream-Skin) — see [Credits](#credits--acknowledgements).
-
-![cursor-skin demo](docs/media/demo.gif)
-
-## Status
-
-**目前处于测试阶段（early / WIP）。** API、选择器、面板和启动方式都可能随 Cursor 更新而失效或改动，欢迎提 Issue / PR，但请先用测试窗试用，并自行承担风险。
-
-做这个项目的原因很简单：看过 Codex 上的 Dream Skin 之后，想在 Cursor 里也有类似体验，搜了一圈发现几乎没有现成的「cursor-skin」一类工具，就用 AI 一起把这条路跑通了。Cursor 用户量不如一些大众编辑器，但手里天天开着它的人并不少——希望能帮到同样想给工作区加一点氛围的人。
-
-### Known issues（当前已知）
-
-| 问题 | 说明 | 状态 |
-|------|------|------|
-| **Changes / Diff 仍不透明** | 右侧 **Changes**（stable-diff）区域常被实心底挡住，壁纸透不出；与侧栏/对话的统一 Frost 不一致。部分 Monaco diff 子层也盖死背景。 | 待修 |
-| **启动白闪** | 注入完成前可能先露出主题底色/空窗，随后壁纸才接上。 | 后续再改（海报/提前 CSS） |
-| **Agents Terminal 字体发虚** | 为透出壁纸开了 xterm 透明背景，部分环境字对比度不够、发虚。 | 已知权衡 / 待调 |
-| **Agents Browser 网页不透** | 网页内容是原生 WebContentsView，Frost 无法让页面透壁纸；右侧栏外壳仍跟滑条变。 | Electron 限制 |
-| **大图 / 视频首次偏慢** | 媒体仍需进 blob（Electron 限制）。视频仅在 **最小化 / 页面隐藏** 时暂停，恢复后再播（不用 window blur，避免切面板卡顿）。 | 已知 |
-| **动态壁纸偶发停播** | 视频壁纸有时会停住不再播（非最小化场景也会出现）。 | 正在排查 |
-| **小窗→最大化重影** | 偶发右侧半透明重影；部分像 Cursor / Electron 合成问题。 | 偶发 |
-| **多 injector** | 同时只应跑 **一个** injector；多开会互相抢注入，布局异常。 | 使用约束 |
-
-其它边角：主题包/选择器随 Cursor 大版本可能失效；迁仓库目录后需重跑 `install-launchers.ps1`。
+> **目前处于测试阶段（early / WIP）**：选择器与面板可能随 Cursor 更新失效，请先用测试窗试用。
 
 ---
 
-## Features
+## 这是什么
 
-- 全窗壁纸：静图 / GIF / MP4 / WebM，也支持 Wallpaper Engine 工坊文件夹
-- 侧栏与右侧编辑区毛玻璃，壁纸可透出
-- 应用内 **Dream Skin** 面板：明暗主题、配色、壁纸、**统一透明度滑条**（左侧栏 / 对话 / 右侧栏一起变）
-- 桌面一键启动（测试窗 / 主会话 / 还原）
-- 可逆：关掉 injector 即恢复，无二进制补丁
+Cursor Skin 是面向 **Cursor IDE** 的轻量视觉定制层。
 
-## Requirements
+它把动态壁纸、半透明 UI、毛玻璃和主题系统直接做进 Cursor 窗口里——利用 Cursor 自带的 Chromium 渲染（含 GPU / 视频解码），而不是再挂一个全屏壁纸程序。
 
-- Windows 10 / 11
-- [Node.js](https://nodejs.org/) 18+（在 `PATH` 里）
-- 已安装 Cursor
+不是「再贴一张背景图」那么简单，而是一套可切换、可还原的 **皮肤运行时**。
 
-## Quick start
+---
 
-本仓库**没有**独立 Dream Skin `.exe`；「一键启动」是桌面快捷方式（`.lnk` → `.vbs` → PowerShell），图标用的是 Cursor。迁目录后请重新执行下面的安装命令。
+## 为什么选 Cursor Skin？
+
+| 传统动态壁纸做法 | Cursor Skin |
+|------------------|-------------|
+| Cursor + 独立壁纸程序 + 额外渲染进程 | Cursor + 一层 Skin Layer |
+
+- **不启动** Wallpaper Engine / Lively 一类额外壁纸进程  
+- **不改** `Cursor.exe` / `app.asar`  
+- 壁纸跑在 Cursor 自己的渲染管线里：GPU 加速、原生视频解码、占用相对可控  
+
+目标：让界面更有氛围，同时尽量少打扰写代码。
+
+---
+
+## 功能特点
+
+### 动态壁纸
+
+支持本地：
+
+- 静图：PNG / JPG / WebP / GIF  
+- 视频：MP4 / WebM  
+
+常见氛围都能上：雨夜、星空、赛博、自然风景……面板里选文件或粘贴路径即可。
+
+### 毛玻璃 UI
+
+- 左侧栏 / 对话区 / 右侧栏统一透明度滑条（Frost）  
+- 壁纸可从半透明层透出  
+- 部分区域受 Electron 限制仍不透（见 [已知问题](#已知问题)）
+
+### 主题系统
+
+`themes/<id>/` 主题包，一键切换：
+
+- 壁纸  
+- 霜化强度  
+- 可选配色 / 明暗基调  
+
+仓库自带示例包；自建方式见 [docs/USAGE.md](docs/USAGE.md#theme-packs主题包)。
+
+### 应用内面板
+
+右下角 **◐ Dream Skin** 芯片：换主题包、配色、壁纸、透明度；可拖动、可收起。
+
+---
+
+## 安全的运行时注入
+
+Cursor Skin 用本机 **Chrome DevTools Protocol（CDP）** 做运行时注入。
+
+**不会：**
+
+- 修改 `Cursor.exe`  
+- 修改 `app.asar`  
+- 替换官方安装文件  
+
+**好处：**
+
+- Cursor 大版本更新后更不容易「装坏」  
+- 关掉 injector / 点 Restore 即可恢复  
+- 不污染原始安装  
+
+启动会带上 loopback 调试端口，用完建议 Restore。细节：[docs/SECURITY.md](docs/SECURITY.md)。
+
+---
+
+## 性能设计
+
+设计目标：加视觉效果的同时，尽量少抢 CPU / 内存。
+
+当前做法包括：
+
+- 走 Cursor 自带 Chromium 解码与合成（不另开壁纸引擎）  
+- 窗口 **最小化 / 页面隐藏** 时暂停视频壁纸，恢复显示再播  
+- 避免用 window blur 乱暂停（Cursor 里切面板容易误触发、反而卡顿）  
+
+实测整体机器占用通常不大，但仍取决于壁纸分辨率与码率——优先 **1080p、24–30fps** 的 H.264。
+
+> **说明：** 用本仓库脚本 / 快捷方式启动 Cursor，会比普通双击 Cursor **更慢一些**（要带调试端口、等 injector 注入）。这是换肤路径的代价，日常写代码仍可用普通 Cursor 图标（无皮肤）。
+
+---
+
+## Wallpaper Engine 兼容
+
+可以导入 **部分** Steam Wallpaper Engine 工坊文件夹，**不是**完整复刻 WE。
+
+| 类型 | 支持情况 |
+|------|----------|
+| 视频壁纸（`video`） | 支持，自动选 MP4 / WebM |
+| 图片 / 解包后的静图 | 支持 |
+| Scene 场景包 | **实验**：用 RePKG 抽出主纹理，变成**静图**（无 WE 视差 / 特效 / 音乐） |
+| Web 壁纸 | **尚未支持**（路线图） |
+
+Cursor Skin **不会**重新实现 Wallpaper Engine；目标是用轻量方式吃掉常见资源。详见 [docs/MEDIA.md](docs/MEDIA.md)。
+
+---
+
+## 快速开始
+
+需要：Windows 10/11、[Node.js](https://nodejs.org/) 18+、已安装 Cursor。
+
+本仓库**没有**独立 `.exe` 启动器；桌面快捷方式由脚本安装（`.lnk` → `.vbs` → PowerShell）。
 
 ```powershell
 git clone https://github.com/centerridache/cursor-skin.git
@@ -56,91 +131,106 @@ cd cursor-skin
 powershell -NoProfile -File scripts\install-launchers.ps1
 ```
 
-桌面会出现三个快捷方式：
+| 快捷方式 | 用途 |
+|----------|------|
+| **Cursor Dream Skin** | 独立测试窗（推荐，不碰主会话） |
+| **Cursor Dream Skin (Main)** | 给主 Cursor 上皮肤（会重启，先保存） |
+| **Restore Cursor Dream Skin** | 停 injector / 关测试窗 |
 
-| Shortcut | When to use |
-|----------|-------------|
-| **Cursor Dream Skin** | 日常试用 — 独立测试窗（不碰主会话） |
-| **Cursor Dream Skin (Main)** | 给真实主 Cursor 上皮肤（会重启 Cursor，先保存） |
-| **Restore Cursor Dream Skin** | 停 injector / 关掉测试窗 |
+打开后点右下角 **Dream Skin** 换壁纸与主题。
 
-打开带皮肤的窗口后，点右下角 **◐ Dream Skin** 芯片即可换风格、上传壁纸、调节透明度、切换主题包。
+> 普通 Cursor 图标启动 = **没有**皮肤（没有调试端口）。  
+> 迁目录后请重跑 `install-launchers.ps1`。
 
-> 用系统里普通的 Cursor 图标启动 = **没有**皮肤（没有调试端口）。  
-> `tools/RePKG.exe` 仅用于 WE 场景包解包，不是启动器。
-
-更细的中文说明（含重装快捷方式）：[docs/USAGE.md](docs/USAGE.md) · 媒体 / WE：[docs/MEDIA.md](docs/MEDIA.md) · 安全：[docs/SECURITY.md](docs/SECURITY.md)
-
-### Scripts only
+仅脚本：
 
 ```powershell
-# 测试窗（推荐）
 powershell -NoProfile -File scripts\start-dream-skin.ps1 -TestWindow
-
-# 主会话（会关掉当前 Cursor 再开）
 powershell -NoProfile -File scripts\start-dream-skin.ps1 -RestartExisting
-
-powershell -NoProfile -File scripts\verify-dream-skin.ps1
 powershell -NoProfile -File scripts\restore-dream-skin.ps1
 ```
 
-## In-app panel
+更多：[docs/USAGE.md](docs/USAGE.md) · [docs/MEDIA.md](docs/MEDIA.md) · [docs/SECURITY.md](docs/SECURITY.md)
 
-- 收缩芯片默认在 **右下角**（避开系统标题栏吸附区）
-- 可拖芯片或面板标题；窗口缩放时会夹回可视区
-- **Skin packs**：一键应用 `themes/<id>/` 包（壁纸 + 霜化 + 可选配色）
-- **Base**：Cursor Dark / Light / Contrast
-- **Color styles**：Moss Night、Ink Paper、Slate Glow、Terminal Amber、Ocean Depth、Graphite、Rose Ember、Snow Peak、Matcha 等（`assets/palettes.json`）
-- **Frost**：左侧栏 / 对话 / 右侧栏 **统一** 透明度 0–100（越低壁纸越明显）；**Changes / Diff 目前仍常不透明**（见上方 Known issues）；Browser 网页内容本身仍不透明（Electron 限制）
-- **Wallpaper**：选文件、选 WE 文件夹、粘贴路径、或重置（有 active pack 时回到该包默认壁纸）
+---
 
-自建主题包见 [docs/USAGE.md](docs/USAGE.md#theme-packs主题包)。
+## 已知问题
 
-## Layout
+用户更常碰到的先写：
+
+- **启动比普通 Cursor 慢**：脚本要开调试端口并注入皮肤  
+- **大尺寸视频首次加载偏慢**（需进 blob）  
+- **动态壁纸偶发停播**（非最小化也会停）— 正在排查  
+- **部分 UI 无法完全透明**（Electron / 原生层限制），例如 Agents Browser 网页内容、**Changes / Diff** 常仍不透明  
+- **Cursor 大版本更新后** 选择器可能失效，需再适配  
+
+其它：
+
+| 问题 | 说明 | 状态 |
+|------|------|------|
+| **Changes / Diff 仍不透明** | 右侧 Changes 常被实心底挡住壁纸 | 待修 |
+| **启动白闪** | 注入完成前可能先闪主题底色 | 后续再改 |
+| **Agents Terminal 字体发虚** | xterm 透壁纸后对比度可能不够 | 已知权衡 |
+| **小窗→最大化重影** | 偶发右侧半透明重影 | 偶发 |
+| **多 injector** | 同时只应跑一个 injector | 使用约束 |
+
+失效时可探测 DOM：`node scripts\probe-dom.mjs --port 9342`（见 [docs/SELECTORS.md](docs/SELECTORS.md)）。
+
+---
+
+## 路线规划
+
+### 当前
+
+- CDP 运行时注入  
+- 静图 / GIF / 视频壁纸  
+- 毛玻璃与统一透明度  
+- 本地主题包  
+- 部分 Wallpaper Engine 资源导入  
+
+### 下一步
+
+- 动态壁纸稳定性与性能（停播、加载）  
+- 启动体验（白闪、体感变慢）  
+- Changes / Diff 等区域透出壁纸  
+- 主题分享 / 在线主题库  
+
+### 未来
+
+- Web Wallpaper 支持  
+- 更完整的 WE 资源兼容（仍保持轻量，不复刻整引擎）  
+- 视情况扩展到其它 Electron IDE  
+
+---
+
+## 仓库结构
 
 ```text
-assets/     theme + CSS + inject payload + palettes + default art
-themes/     shareable skin packs (theme.json + wallpaper)
-scripts/    start / restore / verify / injector / launchers
-docs/       USAGE, MEDIA, SECURITY, SELECTORS
-tools/      optional RePKG for WE scene packs
+assets/     CSS、注入脚本、默认素材、配色
+themes/     可分享主题包（theme.json + 壁纸）
+scripts/    启动 / 还原 / injector / 快捷方式
+docs/       使用、媒体、安全、选择器
+tools/      可选 RePKG（解 WE scene.pkg）
 ```
 
-运行时状态目录：`%LOCALAPPDATA%\CursorDreamSkin\`
+状态目录：`%LOCALAPPDATA%\CursorDreamSkin\`
 
-## Notes
+---
 
-- 请用本仓库的快捷方式启动，这样 Cursor 才会带上 `--remote-debugging-port`
-- Agents 等区域可能用 hashed class；壁纸层仍生效。选择器见 [docs/SELECTORS.md](docs/SELECTORS.md)
-- 注入脚本遵守 Trusted Types，不用 `innerHTML`
-- CDP 权限较强（仅 loopback）— 用完可 Restore。详见 [docs/SECURITY.md](docs/SECURITY.md)
+## 致谢
 
-Cursor 大版本更新后若皮肤失效，可探测 DOM：
+感谢以下项目对 AI 开发工具「氛围换肤」方向的探索：
 
-```powershell
-node scripts\probe-dom.mjs --port 9342
-```
+- [Codex Dream Skin](https://github.com/Fei-Away/Codex-Dream-Skin)（[Fei-Away](https://github.com/Fei-Away)）
 
-## Credits & acknowledgements
+Cursor Skin 是面向 **Cursor** 的**独立实现**（CDP、Windows 脚本、面板与选择器均为自行编写），**不是** Codex Dream Skin 的 fork，也不包含其闭源 / 二进制补丁逻辑。若你也在用 Codex，请直接支持原作者。
 
-**cursor-skin** 的产品思路与体验参考了社区项目：
+其它：Cursor / VS Code 商标归权利人所有；可选 [RePKG](https://github.com/notscuffed/repkg) 按其上游许可证使用；请使用你有权使用的壁纸素材。
 
-| Project | Author / repo | What we learned from |
-|---------|---------------|----------------------|
-| **[Codex Dream Skin](https://github.com/Fei-Away/Codex-Dream-Skin)** | [Fei-Away](https://github.com/Fei-Away) | 用「氛围壁纸 + 毛玻璃」给 AI IDE 换肤的整体方向；桌面一键启动、应用内小面板换主题/壁纸等交互启发 |
-
-本仓库是面向 **Cursor** 的独立实现（CDP 注入、Windows 启动脚本、面板与选择器等均为自行编写），**并非** Codex Dream Skin 的 fork，也不包含其闭源/二进制补丁逻辑。若你也在用 Codex，请直接支持原作者项目。
-
-其它依赖与素材：
-
-- Cursor / VS Code workbench 为第三方产品，商标归其权利人所有
-- 可选 [RePKG](https://github.com/notscuffed/repkg)（`tools/`）用于解开部分 Wallpaper Engine 场景包 — 按其上游许可证使用
-- 默认示例壁纸仅作氛围示意；请自行使用有权使用的图片/视频
+---
 
 ## License
 
 [MIT](LICENSE) © cursor-skin contributors
 
----
-
-**Disclaimer:** Unofficial. Use at your own risk. Enabling the remote debugging port increases local attack surface — prefer the isolated test window for daily experiments.
+**免责声明：** 非官方工具，风险自担。开启本机调试端口会扩大本机攻击面——日常试用优先用独立测试窗。
