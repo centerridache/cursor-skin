@@ -21,20 +21,6 @@ Cursor Skin 是面向 **Cursor IDE** 的轻量视觉定制层。
 
 ---
 
-## 为什么选 Cursor Skin？
-
-| 传统动态壁纸做法 | Cursor Skin |
-|------------------|-------------|
-| Cursor + 独立壁纸程序 + 额外渲染进程 | Cursor + 一层 Skin Layer |
-
-- **不启动** Wallpaper Engine / Lively 一类额外壁纸进程  
-- **不改** `Cursor.exe` / `app.asar`  
-- 壁纸跑在 Cursor 自己的渲染管线里：GPU 加速、原生视频解码、占用相对可控  
-
-目标：让界面更有氛围，同时尽量少打扰写代码。
-
----
-
 ## 功能特点
 
 ### 动态壁纸
