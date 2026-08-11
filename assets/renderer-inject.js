@@ -7,7 +7,8 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 28;
+  const VERSION = 41;
+  const PANEL_V = "15";
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -26,6 +27,10 @@
     prev && typeof prev._wallpaperLabel === "string" ? prev._wallpaperLabel : "Default";
   let paletteCatalog =
     prev && Array.isArray(prev._paletteCatalog) ? prev._paletteCatalog : [];
+  let themePackCatalog =
+    prev && Array.isArray(prev._themePackCatalog) ? prev._themePackCatalog : [];
+  let activeThemePackId =
+    prev && typeof prev._activeThemePackId === "string" ? prev._activeThemePackId : "";
 
   function detectScheme() {
     try {
@@ -71,7 +76,7 @@
     return null;
   }
 
-  function writeStoredMedia(imageUrl, videoUrl, label) {
+  function writeStoredMedia(imageUrl, videoUrl, label, posterKey) {
     try {
       if (imageUrl || videoUrl) {
         sessionStorage.setItem(
@@ -80,6 +85,7 @@
             imageUrl: imageUrl || "",
             videoUrl: videoUrl || "",
             label: label || "",
+            posterKey: posterKey || "",
           })
         );
       } else {
@@ -88,6 +94,62 @@
     } catch (_) {
       /* ignore */
     }
+  }
+
+  function posterStorageKey(posterKey) {
+    return "cds-poster:" + String(posterKey || "");
+  }
+
+  function readCachedPoster(posterKey) {
+    if (!posterKey) return "";
+    try {
+      const v = localStorage.getItem(posterStorageKey(posterKey));
+      if (v && v.indexOf("data:image/") === 0 && v.length < 900000) return v;
+    } catch (_) {
+      /* ignore */
+    }
+    return "";
+  }
+
+  function writeCachedPoster(posterKey, dataUrl) {
+    if (!posterKey || !dataUrl || dataUrl.indexOf("data:image/") !== 0) return;
+    if (dataUrl.length > 900000) return;
+    try {
+      localStorage.setItem(posterStorageKey(posterKey), dataUrl);
+    } catch (_) {
+      /* quota — ignore */
+    }
+  }
+
+  function captureElementPoster(el, maxEdge) {
+    try {
+      const w0 = el.naturalWidth || el.videoWidth || 0;
+      const h0 = el.naturalHeight || el.videoHeight || 0;
+      if (w0 < 8 || h0 < 8) return "";
+      const max = maxEdge || 1280;
+      const scale = Math.min(1, max / Math.max(w0, h0));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(w0 * scale));
+      c.height = Math.max(1, Math.round(h0 * scale));
+      c.getContext("2d").drawImage(el, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", 0.72);
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function setArtPlaceholder(html, imageDataUrl, posterKey, posterDataUrl) {
+    const cached = readCachedPoster(posterKey);
+    const poster = posterDataUrl || cached || "";
+    if (poster) {
+      html.style.setProperty("--cds-art", 'url("' + poster + '")');
+      return "poster";
+    }
+    if (imageDataUrl) {
+      html.style.setProperty("--cds-art", 'url("' + imageDataUrl + '")');
+      return "default";
+    }
+    return "";
   }
 
   function ensureRoot(imageDataUrl, art, videoUrl, imageUrl, opts) {
@@ -168,6 +230,8 @@
 
     let nextImage = imageUrl || "";
     let nextUrl = videoUrl || "";
+    const posterKey = options.posterKey || "";
+    const posterDataUrl = options.posterDataUrl || "";
     const existingKey = root.getAttribute("data-cds-media-key") || "";
     const existingCustom = existingKey.indexOf("i:") === 0 || existingKey.indexOf("v:") === 0;
 
@@ -177,15 +241,18 @@
       if (stored) {
         nextImage = stored.imageUrl || "";
         nextUrl = stored.videoUrl || "";
+        if (!posterKey && stored.posterKey) options.posterKey = stored.posterKey;
       } else if (existingCustom && options.preserveCustomMedia !== false) {
         return root;
       }
     }
 
+    const effectivePosterKey = options.posterKey || posterKey || "";
+
     if (options.resetWallpaper) {
-      writeStoredMedia("", "", "");
+      writeStoredMedia("", "", "", "");
     } else if (nextImage || nextUrl) {
-      writeStoredMedia(nextImage, nextUrl, options.wallpaperLabel || "");
+      writeStoredMedia(nextImage, nextUrl, options.wallpaperLabel || "", effectivePosterKey);
     }
 
     const epoch = options.mediaEpoch ? String(options.mediaEpoch) : "";
@@ -204,21 +271,25 @@
         (hasBlob && video.error));
     const sameMedia = existingKey === mediaKey && mediaKey !== "" && !videoBroken;
 
-    // Bundled default art only when no custom still/video (avoids theme-switch flash).
+    // Instant backdrop: cached poster → bundled default. Never clear to theme-color void
+    // while a large custom still/video is still downloading as a blob.
     if (nextImage || nextUrl) {
-      html.style.setProperty("--cds-art", "none");
+      setArtPlaceholder(html, imageDataUrl, effectivePosterKey, posterDataUrl);
+      html.setAttribute("data-cds-media-pending", "1");
     } else if (imageDataUrl) {
       html.style.setProperty("--cds-art", 'url("' + imageDataUrl + '")');
+      html.removeAttribute("data-cds-media-pending");
+    } else {
+      html.removeAttribute("data-cds-media-pending");
     }
 
     if (sameMedia) {
+      html.removeAttribute("data-cds-media-pending");
       if (nextUrl) {
         ensureVideoWatchdog();
         try {
-          if (video && video.paused) {
-            const play = video.play();
-            if (play && typeof play.catch === "function") play.catch(function () {});
-          }
+          video._cdsWantPlay = true;
+          syncVideoPlayback(video);
         } catch (_) {}
       }
       return root;
@@ -230,6 +301,12 @@
         still.onload = function () {
           if (still.naturalWidth > 0 && still.naturalHeight > 0) {
             html.setAttribute("data-cds-still", "1");
+            html.removeAttribute("data-cds-media-pending");
+            const shot = captureElementPoster(still, 1280);
+            if (shot) {
+              writeCachedPoster(effectivePosterKey, shot);
+              html.style.setProperty("--cds-art", 'url("' + shot + '")');
+            }
           } else {
             html.removeAttribute("data-cds-still");
           }
@@ -237,13 +314,14 @@
         still.onerror = function () {
           html.removeAttribute("data-cds-still");
         };
-        // Keep previous frame visible until the new source paints.
-        if (still.src && still.src !== src) {
-          /* leave data-cds-still as-is during swap */
-        }
         still.setAttribute("src", src);
         still.src = src;
       };
+      // Show cached/full poster as <img> immediately while the full blob downloads.
+      const instant = posterDataUrl || readCachedPoster(effectivePosterKey);
+      if (instant) {
+        applyStillSrc(instant);
+      }
       if (/^https?:\/\/127\.0\.0\.1(?::\d+)?\//i.test(nextImage)) {
         fetch(nextImage)
           .then(function (r) {
@@ -259,13 +337,15 @@
             applyStillSrc(obj);
           })
           .catch(function () {
-            html.removeAttribute("data-cds-still");
-            applyStillSrc(nextImage);
+            if (!instant) {
+              html.removeAttribute("data-cds-still");
+              applyStillSrc(nextImage);
+            }
           });
       } else {
         applyStillSrc(nextImage);
       }
-    } else {
+    } else if (!nextUrl) {
       html.removeAttribute("data-cds-still");
       try {
         if (still._cdsObjectUrl) URL.revokeObjectURL(still._cdsObjectUrl);
@@ -276,7 +356,7 @@
     }
 
     if (nextUrl) {
-      html.removeAttribute("data-cds-still");
+      // Keep CSS art / optional still poster visible until the video paints.
       video._cdsStreamUrl = nextUrl;
 
       const setWallStatus = function (text) {
@@ -291,8 +371,18 @@
         video.onloadeddata = function () {
           if (video.videoWidth > 0) {
             html.setAttribute("data-cds-video", "1");
-            const play = video.play();
-            if (play && typeof play.catch === "function") play.catch(function () {});
+            html.removeAttribute("data-cds-media-pending");
+            html.removeAttribute("data-cds-still");
+            const shot = captureElementPoster(video, 1280);
+            if (shot) {
+              writeCachedPoster(effectivePosterKey, shot);
+              html.style.setProperty("--cds-art", 'url("' + shot + '")');
+              try {
+                video.setAttribute("poster", shot);
+              } catch (_) {}
+            }
+            video._cdsWantPlay = true;
+            syncVideoPlayback(video);
             if (options.wallpaperLabel) setWallStatus(options.wallpaperLabel);
           } else {
             html.removeAttribute("data-cds-video");
@@ -316,8 +406,8 @@
         try {
           video.load();
         } catch (_) {}
-        const play = video.play();
-        if (play && typeof play.catch === "function") play.catch(function () {});
+        video._cdsWantPlay = true;
+        syncVideoPlayback(video);
       };
 
       const fetchToBlobVideo = function (attempt) {
@@ -359,6 +449,19 @@
           });
       };
 
+      // Show last video frame / image poster as still while the MP4 blob downloads.
+      const instant = posterDataUrl || readCachedPoster(effectivePosterKey);
+      if (instant) {
+        still.onload = function () {
+          if (still.naturalWidth > 0) html.setAttribute("data-cds-still", "1");
+        };
+        still.src = instant;
+        still.setAttribute("src", instant);
+        try {
+          video.setAttribute("poster", instant);
+        } catch (_) {}
+      }
+
       // Cursor/Electron blocks <video src="http://127.0.0.1/..."> (URL safety check).
       // Always materialize a blob: URL from the loopback Range server.
       fetchToBlobVideo(0);
@@ -366,6 +469,7 @@
     } else {
       html.removeAttribute("data-cds-video");
       video._cdsStreamUrl = "";
+      video._cdsWantPlay = false;
       try {
         if (video._cdsObjectUrl) URL.revokeObjectURL(video._cdsObjectUrl);
       } catch (_) {}
@@ -382,30 +486,117 @@
     return root;
   }
 
-  function ensureVideoWatchdog() {
-    if (global.__cdsVideoWatchdog) return;
-    global.__cdsVideoWatchdog = true;
-    let repairing = false;
+  // Pause wallpaper only when the page is truly hidden (minimize / occluded).
+  // Do NOT use window blur/focus — Cursor Browser/webview steals focus and caused
+  // pause↔play stutter while the user was still working in Cursor.
+  let videoPageVisible = true;
+  const nativeVideoPause = HTMLMediaElement.prototype.pause;
 
-    const freezeFrame = function (video) {
+  function installVideoPauseGuard() {
+    if (global.__cdsVideoPauseGuard === VERSION) return;
+    global.__cdsVideoPauseGuard = VERSION;
+    global.__cdsVideoPowerMode = "visibility-only";
+    // Older injects left window blur listeners that still call video.pause().
+    // Ignore those while the page is visible so playback stays smooth.
+    HTMLMediaElement.prototype.pause = function () {
       try {
-        if (!video || video.videoWidth < 2) return;
-        const c = document.createElement("canvas");
-        c.width = video.videoWidth;
-        c.height = video.videoHeight;
-        c.getContext("2d").drawImage(video, 0, 0);
-        video.setAttribute("poster", c.toDataURL("image/jpeg", 0.72));
+        if (
+          global.__cdsVideoPowerMode === "visibility-only" &&
+          this &&
+          this.classList &&
+          this.classList.contains("cds-video") &&
+          !document.hidden &&
+          document.visibilityState !== "hidden"
+        ) {
+          return;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return nativeVideoPause.apply(this, arguments);
+    };
+  }
+
+  function hardPauseVideo(video) {
+    try {
+      nativeVideoPause.call(video);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function videoShouldRun() {
+    try {
+      if (document.visibilityState === "hidden" || document.hidden) return false;
+      if (!videoPageVisible) return false;
+    } catch (_) {
+      /* ignore */
+    }
+    return true;
+  }
+
+  function syncVideoPlayback(video) {
+    if (!video || !video.getAttribute("src")) return;
+    const want = video._cdsWantPlay !== false && videoShouldRun();
+    video._cdsPowerPaused = !want;
+    if (want) {
+      if (video.paused || video.ended) {
+        try {
+          if (video.ended) video.currentTime = 0;
+        } catch (_) {}
+        const play = video.play();
+        if (play && typeof play.catch === "function") play.catch(function () {});
+      }
+    } else if (!video.paused) {
+      hardPauseVideo(video);
+    }
+  }
+
+  function ensureVideoPerf() {
+    if (global.__cdsVideoPerfBound === VERSION) return;
+    global.__cdsVideoPerfBound = VERSION;
+    installVideoPauseGuard();
+    try {
+      if (global.__cdsVideoCapRaf) cancelAnimationFrame(global.__cdsVideoCapRaf);
+    } catch (_) {}
+    global.__cdsVideoCapLoop = false;
+    global.__cdsVideoCapRaf = 0;
+    try {
+      document.documentElement.removeAttribute("data-cds-video-cap");
+      const stale = document.querySelectorAll("#" + ROOT_ID + " .cds-video-canvas");
+      for (let i = 0; i < stale.length; i++) stale[i].remove();
+    } catch (_) {}
+
+    const sync = function () {
+      try {
+        const video = document.querySelector("#" + ROOT_ID + " .cds-video");
+        if (!video) return;
+        syncVideoPlayback(video);
       } catch (_) {
         /* ignore */
       }
     };
+
+    document.addEventListener("visibilitychange", function () {
+      videoPageVisible = document.visibilityState !== "hidden" && !document.hidden;
+      sync();
+    });
+    // Recover if an older inject left the video power-paused while still visible.
+    videoPageVisible = document.visibilityState !== "hidden" && !document.hidden;
+    sync();
+  }
+
+  function ensureVideoWatchdog() {
+    ensureVideoPerf();
+    if (global.__cdsVideoWatchdog === VERSION) return;
+    global.__cdsVideoWatchdog = VERSION;
+    let repairing = false;
 
     const softRepair = function (video) {
       if (repairing) return;
       const url = video && video._cdsStreamUrl;
       if (!url) return;
       repairing = true;
-      freezeFrame(video);
       fetch(url)
         .then(function (r) {
           if (!r.ok) throw new Error("repair fetch " + r.status);
@@ -419,8 +610,8 @@
           video._cdsObjectUrl = obj;
           video.src = obj;
           video.load();
-          const play = video.play();
-          if (play && typeof play.catch === "function") play.catch(function () {});
+          video._cdsWantPlay = true;
+          syncVideoPlayback(video);
           document.documentElement.setAttribute("data-cds-video", "1");
         })
         .catch(function () {
@@ -441,25 +632,15 @@
           softRepair(video);
           return;
         }
-        if (video.ended) {
-          try {
-            video.currentTime = 0;
-          } catch (_) {}
-        }
-        if (video.paused || video.ended) {
-          const play = video.play();
-          if (play && typeof play.catch === "function") play.catch(function () {});
-        }
         if (video.videoWidth > 0) html.setAttribute("data-cds-video", "1");
+        // Keep visibility flag honest (older injects could leave a stuck pause).
+        videoPageVisible = document.visibilityState !== "hidden" && !document.hidden;
+        syncVideoPlayback(video);
       } catch (_) {
         /* ignore */
       }
     };
     setInterval(kick, 4000);
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible") kick();
-    });
-    window.addEventListener("focus", kick);
   }
 
   let lastPaletteTokens =
@@ -520,49 +701,55 @@
     return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
   }
 
+  /** Unified panel opacity — sidebar / chat / right column share one frost curve. */
   function frostAlphas(level) {
     const t = Math.min(100, Math.max(0, level)) / 100;
     return {
-      side: 0.04 + t * 0.48,
-      // Keep right column light so wallpaper stays visible under Terminal/Changes
-      editor: 0.06 + t * 0.36,
-      tool: 0.1 + t * 0.4,
-      veilSide: 0.05 + t * 0.5,
-      veilAux: 0.05 + t * 0.45,
-      veilEditor: 0.06 + t * 0.4,
-      veilComposer: 0.04 + t * 0.4,
-      float: 0.14 + t * 0.4,
+      panel: 0.05 + t * 0.62,
+      float: 0.14 + t * 0.42,
+      veil: 0.05 + t * 0.52,
+      tool: 0.08 + t * 0.45,
     };
+  }
+
+  function tagSidebarDock() {
+    try {
+      const navs = document.querySelectorAll("nav.ui-sidebar, .ui-sidebar");
+      for (let i = 0; i < navs.length; i++) {
+        const dock = navs[i].parentElement;
+        if (dock) dock.setAttribute("data-cds-sidebar-dock", "1");
+      }
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   function applyFrostLevel(level) {
     frostLevel = Math.min(100, Math.max(0, Math.round(level)));
     writeFrostLevel(frostLevel);
     const a = frostAlphas(frostLevel);
-    applyVeil({
-      sidebar: a.veilSide,
-      auxiliary: a.veilAux,
-      editor: a.veilEditor,
-      composer: a.veilComposer,
-    });
     const html = document.documentElement;
     html.style.setProperty("--cds-frost-level", String(frostLevel));
     const dark = html.getAttribute("data-cds-scheme") !== "light";
+    let side;
+    let panel;
     if (lastPaletteTokens) {
-      const side = hexToRgba(lastPaletteTokens["sideBar.background"], a.side);
-      const editor = hexToRgba(lastPaletteTokens["editor.background"], a.editor);
-      if (side) html.style.setProperty("--cds-sidebar", side);
-      if (editor) html.style.setProperty("--cds-editor-panel", editor);
-    } else {
-      html.style.setProperty(
-        "--cds-sidebar",
-        dark ? "rgba(8, 10, 18, " + a.side + ")" : "rgba(255, 255, 255, " + a.side + ")"
-      );
-      html.style.setProperty(
-        "--cds-editor-panel",
-        dark ? "rgba(12, 14, 22, " + a.editor + ")" : "rgba(255, 255, 255, " + a.editor + ")"
-      );
+      side = hexToRgba(lastPaletteTokens["sideBar.background"], a.panel);
+      panel = hexToRgba(lastPaletteTokens["editor.background"], a.panel);
     }
+    if (!side) {
+      side = dark
+        ? "rgba(8, 10, 18, " + a.panel + ")"
+        : "rgba(255, 255, 255, " + a.panel + ")";
+    }
+    if (!panel) {
+      panel = dark
+        ? "rgba(12, 14, 22, " + a.panel + ")"
+        : "rgba(255, 255, 255, " + a.panel + ")";
+    }
+    html.style.setProperty("--cds-sidebar", side);
+    html.style.setProperty("--cds-chat-panel", panel);
+    html.style.setProperty("--cds-editor-panel", panel);
     html.style.setProperty(
       "--cds-tool-surface",
       dark ? "rgba(8, 10, 14, " + a.tool + ")" : "rgba(248, 250, 252, " + a.tool + ")"
@@ -571,6 +758,13 @@
       "--cds-float",
       dark ? "rgba(12, 14, 22, " + a.float + ")" : "rgba(18, 22, 34, " + a.float + ")"
     );
+    applyVeil({
+      sidebar: a.veil,
+      auxiliary: a.veil,
+      editor: a.veil,
+      composer: a.veil,
+    });
+    tagSidebarDock();
     const label = document.querySelector("#cursor-dream-skin-hud .cds-frost-value");
     if (label) label.textContent = frostLevel + "%";
     const slider = document.querySelector("#cursor-dream-skin-hud .cds-frost-range");
@@ -586,13 +780,9 @@
       return;
     }
     lastPaletteTokens = tokens;
-    const a = frostAlphas(frostLevel);
-    const side = hexToRgba(tokens["sideBar.background"], a.side);
-    const editor = hexToRgba(tokens["editor.background"], a.editor);
     const accent = tokens["button.background"] || tokens.focusBorder || "";
     const border = hexToRgba(tokens.focusBorder || tokens["button.background"], 0.35);
-    if (side) html.style.setProperty("--cds-sidebar", side);
-    if (editor) html.style.setProperty("--cds-editor-panel", editor);
+    applyFrostLevel(frostLevel);
     if (accent) html.style.setProperty("--cds-accent", accent);
     if (border) html.style.setProperty("--cds-float-border", border);
     html.setAttribute("data-cds-palette", "1");
@@ -749,6 +939,7 @@
     const kick = function () {
       if (global.__cdsToolPaneGen !== gen) return;
       syncToolPaneMark();
+      tagSidebarDock();
       healToolPaneDamage();
     };
     global.__cdsToolPaneClickHandler = kick;
@@ -833,6 +1024,14 @@
         btn.getAttribute("data-palette-id") === activePaletteId ? "1" : "0"
       );
     }
+    const packBtns = hud.querySelectorAll("button[data-theme-pack-id]");
+    for (let i = 0; i < packBtns.length; i++) {
+      const btn = packBtns[i];
+      btn.setAttribute(
+        "data-active",
+        btn.getAttribute("data-theme-pack-id") === activeThemePackId ? "1" : "0"
+      );
+    }
     const wall = hud.querySelector(".cds-wall-name");
     if (wall) wall.textContent = wallpaperLabel || "Default";
   }
@@ -857,6 +1056,7 @@
     const nextScheme = scheme || "dark";
     activePaletteId = paletteId;
     activeThemeId = baseTheme || activeThemeId;
+    activeThemePackId = "";
     pending.push({
       type: "palette",
       paletteId: paletteId,
@@ -869,6 +1069,16 @@
     syncTitleBarVars();
   }
 
+  function queueThemePack(packId) {
+    activeThemePackId = packId || "";
+    pending.push({
+      type: "theme-pack",
+      packId: packId,
+      at: Date.now(),
+    });
+    setPanelActive();
+  }
+
   function queueWallpaper(filePath, name) {
     pending.push({
       type: "wallpaper",
@@ -877,6 +1087,7 @@
       at: Date.now(),
     });
     wallpaperLabel = name || "Custom";
+    activeThemePackId = "";
     setPanelActive();
   }
 
@@ -885,6 +1096,7 @@
       type: folder ? "wallpaper-browse-folder" : "wallpaper-browse",
       at: Date.now(),
     });
+    activeThemePackId = "";
     setPanelActive();
   }
 
@@ -984,6 +1196,47 @@
       return;
     }
     placePanel(hud, pos.x, pos.y);
+  }
+
+  /** Kick compositor after maximize/restore — clears fixed-bg / frost smear ghosts. */
+  function healViewportAfterResize() {
+    try {
+      const root = document.getElementById(ROOT_ID);
+      if (root) {
+        root.style.transform = "translateZ(0) scale(1.0001)";
+        void root.offsetWidth;
+        root.style.transform = "translateZ(0)";
+      }
+      const html = document.documentElement;
+      html.setAttribute("data-cds-resize-heal", "1");
+      requestAnimationFrame(function () {
+        html.removeAttribute("data-cds-resize-heal");
+      });
+      healToolPaneDamage();
+      tagFloatingChrome();
+      syncTitleBarVars();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function ensureViewportResizeWatch() {
+    if (global.__cdsViewportResizeWatch === VERSION) return;
+    global.__cdsViewportResizeWatch = VERSION;
+    let timer = null;
+    let lastW = window.innerWidth;
+    let lastH = window.innerHeight;
+    window.addEventListener("resize", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (Math.abs(w - lastW) < 2 && Math.abs(h - lastH) < 2) return;
+        lastW = w;
+        lastH = h;
+        healViewportAfterResize();
+      }, 60);
+    });
   }
 
   function bindPanelViewport(hud) {
@@ -1174,6 +1427,43 @@
     body.appendChild(header);
     attachDrag(hud, header, {});
 
+    body.appendChild(sectionTitle("Skin packs"));
+    const packMount = document.createElement("div");
+    packMount.setAttribute("data-theme-packs-mount", "1");
+    packMount.setAttribute(
+      "data-sig",
+      themePackCatalog
+        .map(function (p) {
+          return p.id;
+        })
+        .join(",")
+    );
+    if (!themePackCatalog.length) {
+      const empty = document.createElement("div");
+      empty.className = "cds-hud-note";
+      empty.textContent = "No packs in /themes — add theme.json folders";
+      packMount.appendChild(empty);
+    } else {
+      for (let i = 0; i < themePackCatalog.length; i++) {
+        const p = themePackCatalog[i];
+        packMount.appendChild(
+          makeBtn(
+            p.name,
+            {
+              className: "cds-pack-btn",
+              "data-theme-pack-id": p.id,
+              "data-scheme": p.scheme || "dark",
+              title: p.tagline || p.name,
+            },
+            function () {
+              queueThemePack(p.id);
+            }
+          )
+        );
+      }
+    }
+    body.appendChild(packMount);
+
     body.appendChild(sectionTitle("Base theme"));
     for (let i = 0; i < THEMES.length; i++) {
       const t = THEMES[i];
@@ -1240,9 +1530,13 @@
     frostRange.step = "1";
     frostRange.value = String(frostLevel);
     frostRange.className = "cds-frost-range";
-    frostRange.title = "0 = clear wallpaper · 100 = stronger frost";
+    frostRange.title = "Sidebar + chat + right column · 0 = clearer wallpaper · 100 = denser frost";
     frostRange.addEventListener("input", function () {
-      applyFrostLevel(Number(frostRange.value) || 0);
+      const api = global.__cursorDreamSkin;
+      const n = Number(frostRange.value) || 0;
+      // Always call through the live API — panel buttons must not close over a stale applyFrostLevel.
+      if (api && typeof api.setFrostLevel === "function") api.setFrostLevel(n);
+      else applyFrostLevel(n);
     });
     frostRow.appendChild(frostRange);
     const frostHint = document.createElement("div");
@@ -1309,7 +1603,7 @@
     const note = document.createElement("div");
     note.className = "cds-hud-note";
     note.textContent =
-      "WE folder OK · video loads as blob (Electron blocks http media) · big files may take a minute";
+      "WE folder OK · large media shows a poster first, then upgrades · video uses blob (Electron blocks http)";
     body.appendChild(note);
 
     hud.appendChild(body);
@@ -1317,7 +1611,7 @@
 
   function ensurePanel() {
     let hud = document.getElementById(HUD_ID);
-    if (hud && hud.getAttribute("data-cds-panel-v") !== "13") {
+    if (hud && hud.getAttribute("data-cds-panel-v") !== PANEL_V) {
       hud.remove();
       hud = null;
     }
@@ -1325,8 +1619,14 @@
       const wall = hud.querySelector(".cds-wall-name");
       if (wall) wall.textContent = wallpaperLabel || "Default";
       const palMount = hud.querySelector("[data-palettes-mount]");
+      const packMount = hud.querySelector("[data-theme-packs-mount]");
       const sig = paletteCatalog.map(function (p) { return p.id; }).join(",");
-      if (palMount && palMount.getAttribute("data-sig") !== sig) {
+      const packSig = themePackCatalog.map(function (p) { return p.id; }).join(",");
+      if (
+        (palMount && palMount.getAttribute("data-sig") !== sig) ||
+        (packMount && packMount.getAttribute("data-sig") !== packSig) ||
+        !packMount
+      ) {
         rebuildPanelBody(hud);
       }
       setPanelActive();
@@ -1339,7 +1639,7 @@
     hud.id = HUD_ID;
     hud.className = "cds-panel-root";
     hud.setAttribute("data-cds-hud", "1");
-    hud.setAttribute("data-cds-panel-v", "13");
+    hud.setAttribute("data-cds-panel-v", PANEL_V);
     hud.setAttribute("data-collapsed", readCollapsed() ? "1" : "0");
 
     const chip = document.createElement("button");
@@ -1367,6 +1667,10 @@
   function apply(config) {
     const cfg = config || {};
     frostLevel = readFrostLevel();
+    if (typeof cfg.frost === "number" && !Number.isNaN(cfg.frost)) {
+      frostLevel = Math.min(100, Math.max(0, Math.round(cfg.frost)));
+      writeFrostLevel(frostLevel);
+    }
     ensureStyle(cfg.cssText || "");
     ensureRoot(cfg.imageDataUrl || "", cfg.art || {}, cfg.videoUrl || "", cfg.imageUrl || "", {
       skipMediaReload: cfg.skipMediaReload === true,
@@ -1374,6 +1678,8 @@
       preserveCustomMedia: cfg.preserveCustomMedia !== false,
       wallpaperLabel: cfg.wallpaperLabel || "",
       mediaEpoch: cfg.mediaEpoch || 0,
+      posterKey: cfg.posterKey || "",
+      posterDataUrl: cfg.posterDataUrl || "",
     });
     if (cfg.paletteTokens) lastPaletteTokens = cfg.paletteTokens;
     else if (cfg.paletteId === "") lastPaletteTokens = null;
@@ -1384,6 +1690,8 @@
     if (typeof cfg.paletteId === "string") activePaletteId = cfg.paletteId;
     if (typeof cfg.wallpaperLabel === "string") wallpaperLabel = cfg.wallpaperLabel;
     if (Array.isArray(cfg.palettes)) paletteCatalog = cfg.palettes;
+    if (Array.isArray(cfg.themePacks)) themePackCatalog = cfg.themePacks;
+    if (typeof cfg.themePackId === "string") activeThemePackId = cfg.themePackId;
     const scheme =
       cfg.scheme === "light" || cfg.scheme === "dark"
         ? cfg.scheme
@@ -1394,6 +1702,7 @@
     syncTitleBarVars();
     healToolPaneDamage();
     ensureToolPaneWatch();
+    ensureViewportResizeWatch();
     syncToolPaneMark();
     try {
       ensurePanel();
@@ -1410,6 +1719,7 @@
       rootPresent: !!document.getElementById(ROOT_ID),
       hudPresent: !!document.getElementById(HUD_ID),
       paletteId: activePaletteId,
+      themePackId: activeThemePackId,
       wallpaperLabel: wallpaperLabel,
       frost: frostLevel,
       video: !!cfg.videoUrl,
@@ -1442,6 +1752,7 @@
       "--cds-veil-editor",
       "--cds-veil-composer",
       "--cds-sidebar",
+      "--cds-chat-panel",
       "--cds-editor-panel",
       "--cds-accent",
       "--cds-float-border",
@@ -1492,6 +1803,8 @@
     probe: probe,
     queueTheme: queueTheme,
     queuePalette: queuePalette,
+    queueThemePack: queueThemePack,
+    setFrostLevel: applyFrostLevel,
     drainRequests: drainRequests,
     themes: THEMES,
     version: VERSION,
@@ -1502,11 +1815,17 @@
     get _activePaletteId() {
       return activePaletteId;
     },
+    get _activeThemePackId() {
+      return activeThemePackId;
+    },
     get _wallpaperLabel() {
       return wallpaperLabel;
     },
     get _paletteCatalog() {
       return paletteCatalog;
+    },
+    get _themePackCatalog() {
+      return themePackCatalog;
     },
     get _lastPaletteTokens() {
       return lastPaletteTokens;

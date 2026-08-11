@@ -18,7 +18,7 @@ const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const MAX_WALLPAPER_BYTES = 200 * 1024 * 1024; // still images via disk path
-const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // mp4/webm via disk path (Steam WE sized)
+const MAX_VIDEO_BYTES = 8 * 1024 * 1024 * 1024; // mp4/webm streamed in place (no full copy)
 const WALLPAPER_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const VIDEO_EXTS = new Set([".mp4", ".webm"]);
 const mediaServer = createMediaServer();
@@ -27,6 +27,7 @@ function parseArgs(argv) {
   const out = {
     port: 9342,
     themeDir: path.join(ROOT, "assets"),
+    themesDir: path.join(ROOT, "themes"),
     stateDir: "",
     settingsPath: "",
     pollMs: 4000,
@@ -42,6 +43,9 @@ function parseArgs(argv) {
       i++;
     } else if (a === "--theme-dir" && next) {
       out.themeDir = path.resolve(next);
+      i++;
+    } else if (a === "--themes-dir" && next) {
+      out.themesDir = path.resolve(next);
       i++;
     } else if (a === "--state-dir" && next) {
       out.stateDir = path.resolve(next);
@@ -247,6 +251,10 @@ function paletteMetaPath(stateDir) {
   return path.join(stateDir, "active-palette.json");
 }
 
+function themePackMetaPath(stateDir) {
+  return path.join(stateDir, "active-theme-pack.json");
+}
+
 function readJsonSafe(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
   try {
@@ -254,6 +262,124 @@ function readJsonSafe(filePath) {
   } catch {
     return null;
   }
+}
+
+function loadThemePackFromDir(dir) {
+  const themePath = path.join(dir, "theme.json");
+  if (!fs.existsSync(themePath)) return null;
+  const raw = readJsonSafe(themePath);
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || path.basename(dir)).trim();
+  const name = String(raw.name || id).trim();
+  if (!id || !name) return null;
+  const wp = raw.wallpaper && typeof raw.wallpaper === "object" ? raw.wallpaper : {};
+  const src = String(wp.src || raw.image || "").trim();
+  if (!src) return null;
+  const wallPath = path.resolve(dir, src);
+  if (!fs.existsSync(wallPath)) return null;
+  const ext = path.extname(wallPath).toLowerCase();
+  const type =
+    wp.type === "video" || VIDEO_EXTS.has(ext)
+      ? "video"
+      : "image";
+  const previewRel = String(raw.preview || src).trim();
+  const previewPath = path.resolve(dir, previewRel);
+  return {
+    id,
+    name,
+    dir,
+    tagline: String(raw.tagline || ""),
+    brandSubtitle: String(raw.brandSubtitle || ""),
+    wallpaperType: type,
+    wallpaperPath: wallPath,
+    previewPath: fs.existsSync(previewPath) ? previewPath : wallPath,
+    baseTheme: raw.baseTheme || "Cursor Dark",
+    scheme: raw.scheme === "light" ? "light" : "dark",
+    paletteId: String(raw.paletteId || ""),
+    frost: typeof raw.frost === "number" ? Math.min(100, Math.max(0, Math.round(raw.frost))) : null,
+    art: raw.art && typeof raw.art === "object" ? raw.art : null,
+    veil: raw.veil && typeof raw.veil === "object" ? raw.veil : null,
+    colors: raw.colors && typeof raw.colors === "object" ? raw.colors : null,
+  };
+}
+
+function scanThemePacks(themesDir) {
+  if (!themesDir || !fs.existsSync(themesDir)) return [];
+  const out = [];
+  for (const name of fs.readdirSync(themesDir)) {
+    const dir = path.join(themesDir, name);
+    let st;
+    try {
+      st = fs.statSync(dir);
+    } catch {
+      continue;
+    }
+    if (!st.isDirectory()) continue;
+    const pack = loadThemePackFromDir(dir);
+    if (pack) out.push(pack);
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+function findThemePack(packs, packId) {
+  if (!packId) return null;
+  return packs.find((p) => p.id === packId) || null;
+}
+
+function themePackCatalog(packs) {
+  return (packs || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    tagline: p.tagline || "",
+    scheme: p.scheme || "dark",
+  }));
+}
+
+function writeActiveThemePack(stateDir, { packId, customOverride }) {
+  if (!stateDir) return;
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(
+    themePackMetaPath(stateDir),
+    JSON.stringify(
+      {
+        packId: packId || "",
+        customOverride: !!customOverride,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ) + "\n"
+  );
+}
+
+function readActiveThemePack(stateDir) {
+  return readJsonSafe(themePackMetaPath(stateDir)) || { packId: "", customOverride: false };
+}
+
+async function applyThemePackMedia(stateDir, pack) {
+  if (pack.wallpaperType === "video") {
+    const meta = installVideo(stateDir, pack.wallpaperPath, pack.name);
+    const videoUrl = await ensureMediaForMeta(meta);
+    return {
+      meta,
+      videoUrl,
+      imageUrl: "",
+      wallpaperLabel: pack.name,
+      posterKey: mediaPosterKey(meta),
+      mediaEpoch: Date.now(),
+    };
+  }
+  const meta = installWallpaper(stateDir, pack.wallpaperPath, pack.name);
+  const imageUrl = await ensureMediaForMeta(meta);
+  return {
+    meta,
+    videoUrl: "",
+    imageUrl,
+    wallpaperLabel: pack.name,
+    posterKey: mediaPosterKey(meta),
+    mediaEpoch: Date.now(),
+  };
 }
 
 function loadActiveWallpaperPath(stateDir) {
@@ -272,45 +398,51 @@ function assertSafeMediaFile(srcPath, { video }) {
   if (!srcPath || typeof srcPath !== "string") {
     throw new Error("wallpaper path required");
   }
-  const resolved = path.resolve(srcPath);
+  const resolved = path.resolve(srcPath.trim().replace(/^["']|["']$/g, ""));
   const ext = path.extname(resolved).toLowerCase();
   const allowed = video ? VIDEO_EXTS : WALLPAPER_EXTS;
   if (!allowed.has(ext)) {
-    throw new Error(`unsupported wallpaper extension: ${ext}`);
+    throw new Error(`unsupported wallpaper extension: ${ext || "(none)"} (${resolved})`);
   }
-  const st = fs.lstatSync(resolved);
-  if (!st.isFile() || st.isSymbolicLink()) {
-    throw new Error("wallpaper must be a regular file");
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`wallpaper path not found: ${resolved}`);
   }
+  // Follow links / OneDrive reparse points — lstat-only rejects valid media.
+  const st = fs.statSync(resolved);
+  if (!st.isFile()) {
+    throw new Error(`wallpaper must be a regular file: ${resolved}`);
+  }
+  const size = Number(st.size);
   const max = video ? MAX_VIDEO_BYTES : MAX_WALLPAPER_BYTES;
-  if (st.size <= 0 || st.size > max) {
-    throw new Error(`wallpaper size out of range (max ${max} bytes)`);
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new Error(
+      `wallpaper file is empty (0 bytes): ${resolved}` +
+        ` — if this is OneDrive/cloud, mark “Always keep on this device” and retry`
+    );
   }
-  const st2 = fs.statSync(resolved);
-  if (st2.size !== st.size) {
-    throw new Error("wallpaper file changed while reading");
+  if (size > max) {
+    throw new Error(
+      `wallpaper too large (${size} bytes > max ${max}): ${path.basename(resolved)}`
+    );
   }
   if (video) {
     const fd = fs.openSync(resolved, "r");
     try {
       const head = Buffer.alloc(12);
-      fs.readSync(fd, head, 0, 12, 0);
-      const isMp4 =
-        head.toString("ascii", 4, 8) === "ftyp" ||
-        (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70);
-      const isWebm = head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3;
-      if (ext === ".mp4" && !isMp4) {
-        // Some MP4s start with other boxes; allow if size ok but warn via soft check:
-        // require at least non-empty and .mp4 extension already validated
+      const n = fs.readSync(fd, head, 0, 12, 0);
+      if (n < 8) {
+        throw new Error(`wallpaper file unreadable (short read): ${resolved}`);
       }
+      const isWebm = head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3;
       if (ext === ".webm" && !isWebm) {
         throw new Error("webm magic bytes mismatch");
       }
+      // mp4 may start with non-ftyp boxes — extension + size already validated
     } finally {
       fs.closeSync(fd);
     }
   }
-  return { resolved, ext, size: st.size };
+  return { resolved, ext, size };
 }
 
 function assertSafeImageFile(srcPath) {
@@ -533,6 +665,7 @@ async function applyWallpaperPath(stateDir, themeDir, filePath, displayName) {
     imageUrl,
     wallpaperLabel: meta.name || label,
     mediaEpoch: Date.now(),
+    posterKey: mediaPosterKey(meta),
   };
 }
 
@@ -605,11 +738,17 @@ function buildApplyExpression(payload, config) {
 }
 
 function buildDrainExpression(payload) {
-  // Avoid re-eval every poll tick — that churn can hitch the renderer / video decoder.
+  // Re-eval when payload version changes so slider/handlers are not stuck on stale closures.
   return `(() => {
     try {
-      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.drainRequests !== "function") {
-        const src = ${JSON.stringify(payload)};
+      const src = ${JSON.stringify(payload)};
+      const verMatch = /const VERSION\\s*=\\s*(\\d+)/.exec(src);
+      const want = verMatch ? Number(verMatch[1]) : 0;
+      const have =
+        window.__cursorDreamSkin && typeof window.__cursorDreamSkin.version === "number"
+          ? window.__cursorDreamSkin.version
+          : 0;
+      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.drainRequests !== "function" || have !== want) {
         (0, eval)(src);
       }
       if (!window.__cursorDreamSkin || !window.__cursorDreamSkin.drainRequests) return [];
@@ -713,20 +852,35 @@ function makeApplyConfig(themeBundle, extra = {}) {
   const resetWallpaper = extra.resetWallpaper === true;
   return {
     cssText: themeBundle.cssText,
-    // Never ship default poster alongside custom media — avoids theme-switch flash.
-    imageDataUrl: hasCustomMedia ? "" : themeBundle.imageDataUrl,
-    art: themeBundle.theme.art || {},
-    veil: themeBundle.theme.veil || {},
+    // Always ship bundled art as an instant backdrop while custom blob media loads.
+    imageDataUrl: themeBundle.imageDataUrl,
     palettes: paletteCatalog(themeBundle.paletteDoc),
+    themePacks: [],
+    themePackId: "",
     videoUrl: "",
     imageUrl: "",
+    posterKey: "",
+    posterDataUrl: "",
     ...extra,
+    art: extra.art || themeBundle.theme.art || {},
+    veil: extra.veil || themeBundle.theme.veil || {},
+    themePacks: Array.isArray(extra.themePacks) ? extra.themePacks : [],
+    themePackId: typeof extra.themePackId === "string" ? extra.themePackId : "",
     resetWallpaper,
     skipMediaReload: extra.skipMediaReload === true,
-    // If custom already on screen and this payload has no custom URLs, don't fall back to default.
+    // If custom already on screen and this payload has no custom URLs, don't fall back to default-only.
     preserveCustomMedia: !hasCustomMedia && !resetWallpaper,
     paletteTokens,
   };
+}
+
+function mediaPosterKey(meta) {
+  if (!meta || !meta.storedPath) return "";
+  const base = path.basename(meta.storedPath);
+  const size = meta.size || 0;
+  const kind = meta.kind || "image";
+  const updated = meta.updatedAt || "";
+  return `${kind}:${size}:${base}:${updated}`;
 }
 
 async function injectTarget(target, port, themeBundle, mode, extraConfig = {}) {
@@ -896,10 +1050,32 @@ async function main() {
   const wallMeta = loadActiveWallpaperPath(args.stateDir);
   // Always keep bundled default as CSS poster; custom media streams from loopback
   let themeBundle = readTheme(args.themeDir, null);
+  const themePacks = scanThemePacks(args.themesDir);
+  log(
+    `theme packs: ${themePacks.length}${
+      themePacks.length ? " [" + themePacks.map((p) => p.id).join(", ") + "]" : ""
+    }`
+  );
+  const savedPackState = args.stateDir ? readActiveThemePack(args.stateDir) : { packId: "", customOverride: false };
+  let currentThemePackId = savedPackState.packId || "";
+  let packCustomOverride = !!savedPackState.customOverride;
+  let packArt = null;
+  let packVeil = null;
+  let packFrost;
+  let packInlineColors = null;
+  const bootPack = findThemePack(themePacks, currentThemePackId);
+  if (bootPack) {
+    packArt = bootPack.art;
+    packVeil = bootPack.veil;
+    if (typeof bootPack.frost === "number") packFrost = bootPack.frost;
+    if (bootPack.colors) packInlineColors = bootPack.colors;
+  }
+
   let wallpaperLabel = wallMeta?.name || "Default";
   let videoUrl = "";
   let imageUrl = "";
   let mediaEpoch = 0;
+  let posterKey = wallMeta ? mediaPosterKey(wallMeta) : "";
   try {
     if (wallMeta?.kind === "video") {
       videoUrl = await ensureMediaForMeta(wallMeta);
@@ -907,9 +1083,20 @@ async function main() {
     } else if (wallMeta?.kind === "image") {
       imageUrl = await ensureMediaForMeta(wallMeta);
       mediaEpoch = Date.now();
+    } else if (bootPack && !packCustomOverride) {
+      const applied = await applyThemePackMedia(args.stateDir, bootPack);
+      videoUrl = applied.videoUrl;
+      imageUrl = applied.imageUrl;
+      wallpaperLabel = applied.wallpaperLabel;
+      mediaEpoch = applied.mediaEpoch;
+      posterKey = applied.posterKey;
     }
   } catch (e) {
     log(`media server fail: ${e.message || e}`);
+  }
+
+  if (bootPack && !packCustomOverride) {
+    wallpaperLabel = bootPack.name;
   }
 
   const mode = args.remove ? "remove" : args.verify ? "verify" : "apply";
@@ -930,16 +1117,31 @@ async function main() {
       currentScheme = pal.scheme === "light" ? "light" : "dark";
     }
   }
+  if (bootPack && !packCustomOverride) {
+    currentThemeId = bootPack.baseTheme || currentThemeId;
+    currentScheme = bootPack.scheme || currentScheme;
+    if (bootPack.colors) {
+      currentPaletteId = "";
+      packInlineColors = bootPack.colors;
+    } else if (bootPack.paletteId) {
+      const pal = findPalette(themeBundle.paletteDoc, bootPack.paletteId);
+      if (pal) {
+        currentPaletteId = pal.id;
+        currentThemeId = pal.baseTheme || currentThemeId;
+        currentScheme = pal.scheme === "light" ? "light" : "dark";
+      }
+    }
+  }
 
   log(
-    `mode=${mode} port=${args.port} theme=${themeBundle.theme.id} colorTheme=${currentThemeId} wallpaper=${wallpaperLabel}${videoUrl ? " video=on" : ""}${imageUrl ? " image=on" : ""}`
+    `mode=${mode} port=${args.port} theme=${themeBundle.theme.id} colorTheme=${currentThemeId} wallpaper=${wallpaperLabel}${videoUrl ? " video=on" : ""}${imageUrl ? " image=on" : ""}${currentThemePackId ? " pack=" + currentThemePackId : ""}`
   );
   if (args.settingsPath) log(`settings=${args.settingsPath}`);
 
   const pages = await waitForTargets(args.port);
   log(`found ${pages.length} workbench target(s)`);
 
-  const extra = {
+  const buildExtra = (more = {}) => ({
     themeId: currentThemeId,
     scheme: currentScheme,
     paletteId: currentPaletteId,
@@ -947,7 +1149,17 @@ async function main() {
     videoUrl,
     imageUrl,
     mediaEpoch,
-  };
+    posterKey,
+    themePacks: themePackCatalog(themePacks),
+    themePackId: packCustomOverride ? "" : currentThemePackId,
+    art: packArt || undefined,
+    veil: packVeil || undefined,
+    frost: packFrost,
+    paletteTokens: packInlineColors || undefined,
+    ...more,
+  });
+
+  const extra = buildExtra();
   const results = [];
   for (const t of pages) {
     try {
@@ -1029,14 +1241,9 @@ async function main() {
                     /* ignore */
                   }
                 }
-                await appearanceAll(list, args.port, themeBundle, {
-                  themeId: currentThemeId,
-                  scheme: currentScheme,
+                await appearanceAll(list, args.port, themeBundle, buildExtra({
                   paletteId: "",
-                  wallpaperLabel,
-                  videoUrl,
-                  imageUrl,
-                });
+                }));
               } else if (req.type === "palette" && req.paletteId) {
                 const pal = findPalette(themeBundle.paletteDoc, req.paletteId);
                 if (!pal) {
@@ -1071,14 +1278,107 @@ async function main() {
                     ) + "\n"
                   );
                 }
-                await appearanceAll(list, args.port, themeBundle, {
-                  themeId: currentThemeId,
-                  scheme: currentScheme,
-                  paletteId: currentPaletteId,
-                  wallpaperLabel,
-                  videoUrl,
-                  imageUrl,
-                });
+                await appearanceAll(list, args.port, themeBundle, buildExtra());
+              } else if (req.type === "theme-pack" && req.packId) {
+                const pack = findThemePack(themePacks, req.packId);
+                if (!pack) {
+                  log(`unknown theme pack ${req.packId}`);
+                  continue;
+                }
+                try {
+                  const applied = await applyThemePackMedia(args.stateDir, pack);
+                  videoUrl = applied.videoUrl;
+                  imageUrl = applied.imageUrl;
+                  wallpaperLabel = applied.wallpaperLabel;
+                  mediaEpoch = applied.mediaEpoch;
+                  posterKey = applied.posterKey;
+                  currentThemePackId = pack.id;
+                  packCustomOverride = false;
+                  packArt = pack.art;
+                  packVeil = pack.veil;
+                  packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
+                  packInlineColors = pack.colors || null;
+                  currentThemeId = pack.baseTheme || "Cursor Dark";
+                  currentScheme = pack.scheme === "light" ? "light" : "dark";
+                  if (pack.colors) {
+                    currentPaletteId = "";
+                    if (args.settingsPath) {
+                      writeAppearance(args.settingsPath, {
+                        colorTheme: currentThemeId,
+                        tokens: {
+                          ...(themeBundle.paletteDoc.titleBar || {}),
+                          ...pack.colors,
+                        },
+                        paletteId: "",
+                      });
+                    }
+                    if (args.stateDir) {
+                      try {
+                        fs.unlinkSync(paletteMetaPath(args.stateDir));
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                  } else if (pack.paletteId) {
+                    const pal = findPalette(themeBundle.paletteDoc, pack.paletteId);
+                    if (pal) {
+                      currentPaletteId = pal.id;
+                      currentThemeId = pal.baseTheme || currentThemeId;
+                      currentScheme = pal.scheme === "light" ? "light" : "dark";
+                      const tokens = {
+                        ...(themeBundle.paletteDoc.titleBar || {}),
+                        ...(pal.tokens || {}),
+                      };
+                      if (args.settingsPath) {
+                        writeAppearance(args.settingsPath, {
+                          colorTheme: currentThemeId,
+                          tokens,
+                          paletteId: pal.id,
+                        });
+                      }
+                      if (args.stateDir) {
+                        fs.writeFileSync(
+                          paletteMetaPath(args.stateDir),
+                          JSON.stringify(
+                            {
+                              paletteId: pal.id,
+                              updatedAt: new Date().toISOString(),
+                            },
+                            null,
+                            2
+                          ) + "\n"
+                        );
+                      }
+                    } else {
+                      currentPaletteId = "";
+                      log(`theme pack palette missing: ${pack.paletteId}`);
+                    }
+                  } else {
+                    currentPaletteId = "";
+                    if (args.settingsPath) {
+                      writeAppearance(args.settingsPath, {
+                        colorTheme: currentThemeId,
+                        clearPalette: true,
+                        paletteId: "",
+                      });
+                    }
+                    if (args.stateDir) {
+                      try {
+                        fs.unlinkSync(paletteMetaPath(args.stateDir));
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                  }
+                  writeActiveThemePack(args.stateDir, {
+                    packId: pack.id,
+                    customOverride: false,
+                  });
+                  needFullReapply = true;
+                  log(`theme-pack -> ${pack.id}`);
+                } catch (e) {
+                  log(`theme-pack fail: ${e.message || e}`);
+                }
               } else if (
                 req.type === "wallpaper" &&
                 req.path
@@ -1095,6 +1395,12 @@ async function main() {
                   imageUrl = applied.imageUrl;
                   wallpaperLabel = applied.wallpaperLabel;
                   mediaEpoch = applied.mediaEpoch || Date.now();
+                  posterKey = applied.posterKey || mediaPosterKey(applied.meta);
+                  packCustomOverride = true;
+                  writeActiveThemePack(args.stateDir, {
+                    packId: currentThemePackId,
+                    customOverride: true,
+                  });
                   needFullReapply = true;
                   log(
                     `${applied.meta.kind} -> ${wallpaperLabel} (${applied.meta.size} bytes)`
@@ -1114,6 +1420,15 @@ async function main() {
                   if (!chosen) {
                     log("wallpaper-browse: cancelled");
                   } else {
+                    log(`wallpaper-browse picked: ${chosen}`);
+                    try {
+                      const st = fs.statSync(chosen);
+                      log(
+                        `wallpaper-browse stat: isFile=${st.isFile()} size=${st.size}`
+                      );
+                    } catch (se) {
+                      log(`wallpaper-browse stat fail: ${se.message || se}`);
+                    }
                     const applied = await applyWallpaperPath(
                       args.stateDir,
                       args.themeDir,
@@ -1125,13 +1440,22 @@ async function main() {
                     imageUrl = applied.imageUrl;
                     wallpaperLabel = applied.wallpaperLabel;
                     mediaEpoch = applied.mediaEpoch || Date.now();
+                    posterKey = applied.posterKey || mediaPosterKey(applied.meta);
+                    packCustomOverride = true;
+                    writeActiveThemePack(args.stateDir, {
+                      packId: currentThemePackId,
+                      customOverride: true,
+                    });
                     needFullReapply = true;
                     log(
-                      `wallpaper-browse -> ${wallpaperLabel} (${applied.meta.size} bytes)`
+                      `wallpaper-browse -> ${wallpaperLabel} (${applied.meta.size} bytes) video=${videoUrl ? "on" : "off"}`
                     );
                   }
                 } catch (e) {
-                  log(`wallpaper-browse fail: ${e.message || e}`);
+                  const msg = e && e.message ? e.message : String(e);
+                  log(`wallpaper-browse fail: ${msg}`);
+                  wallpaperLabel = "Upload failed";
+                  needFullReapply = true;
                 }
               } else if (req.type === "wallpaper-data" && req.base64) {
                 try {
@@ -1145,34 +1469,65 @@ async function main() {
                   imageUrl = await ensureMediaForMeta(meta);
                   wallpaperLabel = meta.name || "Custom";
                   mediaEpoch = Date.now();
+                  posterKey = mediaPosterKey(meta);
+                  packCustomOverride = true;
+                  writeActiveThemePack(args.stateDir, {
+                    packId: currentThemePackId,
+                    customOverride: true,
+                  });
                   needFullReapply = true;
                   log(`wallpaper-data -> ${wallpaperLabel} (${meta.size} bytes)`);
                 } catch (e) {
                   log(`wallpaper-data fail: ${e.message || e}`);
                 }
               } else if (req.type === "wallpaper-reset") {
-                resetWallpaper(args.stateDir);
-                themeBundle = readTheme(args.themeDir, null);
-                videoUrl = "";
-                imageUrl = "";
-                wallpaperLabel = "Default";
-                mediaEpoch = Date.now();
-                needFullReapply = true;
-                log("wallpaper -> Default");
+                const pack = findThemePack(themePacks, currentThemePackId);
+                if (pack) {
+                  try {
+                    const applied = await applyThemePackMedia(args.stateDir, pack);
+                    videoUrl = applied.videoUrl;
+                    imageUrl = applied.imageUrl;
+                    wallpaperLabel = applied.wallpaperLabel;
+                    mediaEpoch = applied.mediaEpoch;
+                    posterKey = applied.posterKey;
+                    packCustomOverride = false;
+                    packArt = pack.art;
+                    packVeil = pack.veil;
+                    packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
+                    writeActiveThemePack(args.stateDir, {
+                      packId: pack.id,
+                      customOverride: false,
+                    });
+                    needFullReapply = true;
+                    log(`wallpaper-reset -> pack ${pack.id}`);
+                  } catch (e) {
+                    log(`wallpaper-reset pack fail: ${e.message || e}`);
+                  }
+                } else {
+                  resetWallpaper(args.stateDir);
+                  themeBundle = readTheme(args.themeDir, null);
+                  videoUrl = "";
+                  imageUrl = "";
+                  wallpaperLabel = "Default";
+                  mediaEpoch = Date.now();
+                  posterKey = "";
+                  currentThemePackId = "";
+                  packCustomOverride = false;
+                  packArt = null;
+                  packVeil = null;
+                  packFrost = undefined;
+                  packInlineColors = null;
+                  writeActiveThemePack(args.stateDir, { packId: "", customOverride: false });
+                  needFullReapply = true;
+                  log("wallpaper -> Default");
+                }
               }
               // wallpaper* handlers set needFullReapply; theme/palette use appearanceAll only
             }
             if (needFullReapply) {
-              await reapplyAll(list, args.port, themeBundle, {
-                themeId: currentThemeId,
-                scheme: currentScheme,
-                paletteId: currentPaletteId,
-                wallpaperLabel,
-                videoUrl,
-                imageUrl,
-                mediaEpoch,
+              await reapplyAll(list, args.port, themeBundle, buildExtra({
                 resetWallpaper: !videoUrl && !imageUrl && wallpaperLabel === "Default",
-              });
+              }));
             }
           }
         } catch (e) {
@@ -1205,15 +1560,7 @@ async function main() {
         if (needs) {
           missStreak.set(t.id, 0);
           log(`re-apply ${t.id}${isNew ? " (new)" : ""}`);
-          await injectTarget(t, args.port, themeBundle, "apply", {
-            themeId: currentThemeId,
-            scheme: currentScheme,
-            paletteId: currentPaletteId,
-            wallpaperLabel,
-            videoUrl,
-            imageUrl,
-            mediaEpoch,
-          });
+          await injectTarget(t, args.port, themeBundle, "apply", buildExtra());
         }
       }
       const live = new Set(list.map((t) => t.id));

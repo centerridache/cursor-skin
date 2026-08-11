@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "moss-night",
+  "name": "Moss Night",
+  "brandSubtitle": "CURSOR DREAM SKIN",
+  "tagline": "Deep green frost over the same sky.",
+  "wallpaper": {
+    "type": "image",
+    "src": "wallpaper.jpg"
+  },
+  "preview": "preview.jpg",
+  "appearance": "dark",
+  "baseTheme": "Cursor Dark",
+  "scheme": "dark",
+  "paletteId": "moss-night",
+  "frost": 55,
+  "art": {
+    "focusX": 0.72,
+    "focusY": 0.4,
+    "safeArea": "left",
+    "taskMode": "ambient"
+  },
+  "veil": {
+    "sidebar": 0.32,
+    "auxiliary": 0.3,
+    "editor": 0.36,
+    "composer": 0.26
+  },
+  "colors": null
+}

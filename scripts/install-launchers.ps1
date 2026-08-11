@@ -61,29 +61,42 @@ $icon = if (Test-Path -LiteralPath $cursorExe) { "$cursorExe,0" } else { "powers
 
 $launchMainVbs = Join-Path $PSScriptRoot "launch-dream-skin-main.vbs"
 
-# Hidden-console VBS wrappers (feel closer to an app than a flashing PowerShell window)
+# Hidden-console VBS wrappers — resolve repo root from script path (no absolute user paths in git).
 $launchVbsBody = @"
 ' Launch Cursor Dream Skin test window (does not close your main Cursor).
+' Resolves repo root from this script path (no machine-specific absolute paths).
 Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "$root"
-sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$startPs1"" -TestWindow", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+root = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
+ps1 = root & "\scripts\start-dream-skin.ps1"
+sh.CurrentDirectory = root
+sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & ps1 & """ -TestWindow", 0, False
 "@
 $launchMainVbsBody = @"
 ' Restart MAIN Cursor under Dream Skin (save work first).
 ' Errors show a MessageBox from start-dream-skin.ps1 (window used to flash and vanish).
+' Resolves repo root from this script path (no machine-specific absolute paths).
 Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "$root"
-sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$startPs1"" -RestartExisting", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+root = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
+ps1 = root & "\scripts\start-dream-skin.ps1"
+sh.CurrentDirectory = root
+sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & ps1 & """ -RestartExisting", 0, False
 "@
 $restoreVbsBody = @"
 ' Restore / close Dream Skin test session.
+' Resolves repo root from this script path (no machine-specific absolute paths).
 Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "$root"
-sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$restorePs1""", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+root = fso.GetParentFolderName(fso.GetParentFolderName(WScript.ScriptFullName))
+ps1 = root & "\scripts\restore-dream-skin.ps1"
+sh.CurrentDirectory = root
+sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & ps1 & """", 0, False
 "@
 $launchVbsBody | Set-Content -LiteralPath $launchVbs -Encoding ASCII
 $launchMainVbsBody | Set-Content -LiteralPath $launchMainVbs -Encoding ASCII
 $restoreVbsBody | Set-Content -LiteralPath $restoreVbs -Encoding ASCII
+
 
 New-Item -ItemType Directory -Force -Path $programs | Out-Null
 

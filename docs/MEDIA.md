@@ -7,7 +7,7 @@ Guidelines for still images and video backgrounds in Cursor Dream Skin.
 | Kind | Ideal | Acceptable | Notes |
 |------|-------|------------|-------|
 | Still image | **1920×1080** (16:9) | 2560×1440, 3840×2160 | Wider than tall works best; ultrawide (21:9) is fine. File ≤ **200 MB**. |
-| Video | **1920×1080** H.264 MP4 | 1280×720–2560×1440 | File ≤ **2 GB**. Higher resolution burns CPU/GPU while coding. |
+| Video | **1920×1080** H.264 MP4 | 1280×720–2560×1440 | File ≤ **8 GB**. Prefer 1080p/24–30fps; Dream Skin pauses playback when Cursor is unfocused or minimized. |
 
 Focus point in `theme.json` (`art.focusX` / `art.focusY`, 0–1) should sit on the calm area of the art so UI text stays readable. Default is roughly right-center.
 
@@ -22,10 +22,10 @@ Focus point in `theme.json` (`art.focusX` / `art.focusY`, 0–1) should sit on t
 ## Video (MP4 / WebM)
 
 - **Formats:** `.mp4` (H.264 + AAC/no audio preferred), `.webm` (VP9/VP8)
-- **Max size:** **2 GB**
-- **Transport:** **disk path only** (copied into `%LOCALAPPDATA%\CursorDreamSkin\wallpapers\`, then streamed from loopback)
-- **Playback:** muted, looping, autoplay; served only from `127.0.0.1` via a one-shot token URL
-- **Performance tip:** 24–30 fps, compressed; avoid 4K 60fps loops on laptops unless your machine is strong.
+- **Max size:** **8 GB** (served from the original path; not fully copied)
+- **Transport:** **disk path only** via file picker / paste path; streamed from loopback then fetched into a **blob URL** (Electron blocks raw `http://127.0.0.1` media)
+- **Playback:** muted, looping; **pauses when the Cursor window is minimized / page hidden**, resumes when visible again
+- **Tip:** Prefer **1920×1080 H.264 ~24–30 fps**. 4K/60fps still costs more while the window is visible.
 
 ### Steam Wallpaper Engine
 

@@ -12,8 +12,9 @@ html[data-cursor-dream-skin="1"] {
   --cds-float-border: rgba(255, 255, 255, 0.16);
   --cds-float-fg: rgba(255, 255, 255, 0.92);
   --cds-float-muted: rgba(255, 255, 255, 0.62);
-  --cds-sidebar: rgba(12, 16, 28, 0.22);
-  --cds-editor-panel: rgba(18, 22, 34, 0.22);
+  --cds-sidebar: rgba(12, 16, 28, 0.16);
+  --cds-chat-panel: rgba(12, 14, 22, 0.42);
+  --cds-editor-panel: rgba(12, 14, 22, 0.22);
   --cds-tool-surface: rgba(10, 12, 18, 0.28);
   --cds-accent: #6ea8ff;
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
@@ -23,21 +24,21 @@ html[data-cursor-dream-skin="1"] {
   --cds-veil-editor: 0.32;
   --cds-veil-composer: 0.22;
 
+  /* Wallpaper lives only on #cursor-dream-skin-root (fixed layer).
+     Do NOT paint --cds-art on html with background-attachment:fixed —
+     maximize/restore leaves Chromium compositor ghosts (faded UI smear). */
   background-color: transparent !important;
-  background-image: var(--cds-art) !important;
-  background-repeat: no-repeat !important;
-  background-size: cover !important;
-  background-position: var(--cds-focus-x) var(--cds-focus-y) !important;
-  background-attachment: fixed !important;
+  background-image: none !important;
 }
 
 html[data-cursor-dream-skin="1"][data-cds-scheme="dark"] {
   --cds-float: rgba(12, 14, 22, 0.48);
   --cds-float-strong: rgba(12, 14, 22, 0.58);
   --cds-float-border: rgba(255, 255, 255, 0.12);
-  --cds-sidebar: rgba(8, 10, 18, 0.28);
-  --cds-editor-panel: rgba(12, 14, 22, 0.24);
-  --cds-tool-surface: rgba(8, 10, 14, 0.3);
+  --cds-sidebar: rgba(8, 10, 18, 0.18);
+  --cds-chat-panel: rgba(12, 14, 22, 0.48);
+  --cds-editor-panel: rgba(12, 14, 22, 0.2);
+  --cds-tool-surface: rgba(8, 10, 14, 0.28);
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -46,23 +47,34 @@ html[data-cursor-dream-skin="1"][data-cds-scheme="light"] {
   --cds-float: rgba(18, 22, 34, 0.4);
   --cds-float-strong: rgba(18, 22, 34, 0.52);
   --cds-float-border: rgba(255, 255, 255, 0.16);
-  --cds-sidebar: rgba(255, 255, 255, 0.16);
-  --cds-editor-panel: rgba(255, 255, 255, 0.28);
-  --cds-tool-surface: rgba(248, 250, 252, 0.32);
+  --cds-sidebar: rgba(255, 255, 255, 0.12);
+  --cds-chat-panel: rgba(18, 22, 34, 0.4);
+  --cds-editor-panel: rgba(255, 255, 255, 0.14);
+  --cds-tool-surface: rgba(248, 250, 252, 0.22);
 }
 
+html[data-cursor-dream-skin="1"],
 html[data-cursor-dream-skin="1"] body {
-  /* Never position:relative on body 鈥?Agents absolute layout needs height from viewport */
+  /* Never position:relative on body — Agents absolute layout needs height from viewport */
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
   background: transparent !important;
   background-color: transparent !important;
+  background-image: none !important;
 }
 
 #cursor-dream-skin-root {
   position: fixed !important;
   inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   z-index: 0 !important;
   pointer-events: none !important;
   overflow: hidden !important;
+  /* Promote a stable layer so resize does not smear backdrop samples */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 #cursor-dream-skin-root .cds-wallpaper {
@@ -103,7 +115,7 @@ html[data-cds-still="1"] #cursor-dream-skin-root .cds-wallpaper {
   object-position: var(--cds-focus-x) var(--cds-focus-y);
   display: none;
   pointer-events: none;
-  background: #000;
+  background: transparent;
 }
 
 html[data-cds-video="1"] #cursor-dream-skin-root .cds-video {
@@ -117,6 +129,11 @@ html[data-cds-video="1"] #cursor-dream-skin-root .cds-still {
 html[data-cds-video="1"] #cursor-dream-skin-root .cds-wallpaper {
   /* keep as poster/fallback under video if first frame slow */
   opacity: 0.35;
+}
+
+/* While full-res blob is still downloading, keep CSS art fully visible */
+html[data-cds-media-pending="1"] #cursor-dream-skin-root .cds-wallpaper {
+  opacity: 1;
 }
 
 /* Very light veil 鈥?home stays expressive like Codex */
@@ -149,29 +166,48 @@ html[data-cursor-dream-skin="1"] .workspace-container {
   background-color: transparent !important;
 }
 
-/* Main canvas 鈥?clear, like Codex home (NOT milky full-panel frost) */
+/* Agents shell must track the window after maximize / snap */
+html[data-cursor-dream-skin="1"] .workspaces-container,
+html[data-cursor-dream-skin="1"] .workspace-container {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+/* Unified columns — Frost slider drives --cds-sidebar / --cds-chat-panel / --cds-editor-panel */
 html[data-cursor-dream-skin="1"] .agent-panel {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: var(--cds-chat-panel) !important;
+  background-color: var(--cds-chat-panel) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
 }
 
-/* Sidebar 鈥?light frosted strip, art shows through */
+/* Agents sidebar dock: Cursor dropped .glass-sidebar-docked; parent of nav is solid #181818 */
 html[data-cursor-dream-skin="1"] .glass-sidebar-docked,
-html[data-cursor-dream-skin="1"] [class*="glass-sidebar-docked"] {
+html[data-cursor-dream-skin="1"] [class*="glass-sidebar-docked"],
+html[data-cursor-dream-skin="1"] [data-cds-sidebar-dock="1"],
+html[data-cursor-dream-skin="1"] div:has(> nav.ui-sidebar),
+html[data-cursor-dream-skin="1"] div:has(> .ui-sidebar) {
   background-color: var(--cds-sidebar) !important;
+  background-image: none !important;
   backdrop-filter: var(--cds-frost) !important;
   -webkit-backdrop-filter: var(--cds-frost) !important;
   border-right: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
 }
 
-/* Right editor column — same clarity as main canvas (tint only, no stacked blur) */
+html[data-cursor-dream-skin="1"] .ui-sidebar,
+html[data-cursor-dream-skin="1"] nav.ui-sidebar {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Right editor / Browse host — same frost curve as chat (native Browser page stays opaque) */
 html[data-cursor-dream-skin="1"] .editor-panel-container,
 html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] {
-  background-color: transparent !important;
+  background-color: var(--cds-editor-panel) !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -188,11 +224,9 @@ html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
   box-shadow: none !important;
 }
 
-/* Terminal / Browser: keep hosts clear (xterm canvas transparency is JS-driven) */
+/* Terminal host stays clear so wallpaper / xterm transparency work; Browser page is native-opaque */
 html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] .editor-panel-container,
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] .editor-panel-container,
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [class*="editor-panel-container"],
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [class*="editor-panel-container"] {
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [class*="editor-panel-container"] {
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -200,8 +234,10 @@ html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [class*="editor-p
 
 html[data-cursor-dream-skin="1"] {
   --vscode-terminal-background: transparent !important;
-  --vscode-panel-background: transparent !important;
-  --vscode-editorPane-background: transparent !important;
+  /* Keep a readable dark plate under Agents editor/markdown — full transparent
+     washes light theme text over bright wallpaper on startup. */
+  --vscode-panel-background: var(--cds-editor-panel) !important;
+  --vscode-editorPane-background: var(--cds-editor-panel) !important;
 }
 
 /* Kill Cursor's solid #141414 plates around Agents terminal */
@@ -244,7 +280,8 @@ html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-stable-diff"]
 
 html[data-cursor-dream-skin="1"][data-cds-palette="1"] .editor-panel-container,
 html[data-cursor-dream-skin="1"][data-cds-palette="1"] [class*="editor-panel-container"] {
-  background-color: transparent !important;
+  /* Keep Frost-driven tint even when a color style is active */
+  background-color: var(--cds-editor-panel) !important;
 }
 
 html[data-cursor-dream-skin="1"] .glass-sidebar-header-actions-stack,
@@ -255,6 +292,7 @@ html[data-cursor-dream-skin="1"] [class*="glass-sidebar-header"] {
 html[data-cursor-dream-skin="1"] .ui-sidebar,
 html[data-cursor-dream-skin="1"] nav.ui-sidebar {
   background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* Title strip + try to tint native Windows caption overlay via VS Code vars */

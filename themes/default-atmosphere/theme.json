@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "default-atmosphere",
+  "name": "Default Atmosphere",
+  "brandSubtitle": "CURSOR DREAM SKIN",
+  "tagline": "One image, one mood — code with atmosphere.",
+  "wallpaper": {
+    "type": "image",
+    "src": "wallpaper.jpg"
+  },
+  "preview": "preview.jpg",
+  "appearance": "auto",
+  "baseTheme": "Cursor Dark",
+  "scheme": "dark",
+  "paletteId": "",
+  "frost": 40,
+  "art": {
+    "focusX": 0.72,
+    "focusY": 0.4,
+    "safeArea": "left",
+    "taskMode": "ambient"
+  },
+  "veil": {
+    "sidebar": 0.28,
+    "auxiliary": 0.26,
+    "editor": 0.32,
+    "composer": 0.22
+  },
+  "colors": null
+}
