@@ -1,4 +1,8 @@
-/* Cursor Dream Skin 鈥?Codex-style: continuous wallpaper under floating frosted chrome. */
+/* Cursor Dream Skin — Codex-style: continuous wallpaper under floating frosted chrome.
+ *
+ * Selector authority for probe/health: adapters/cursor/default.json
+ * (CSS below still hardcodes many of the same selectors — update both on Cursor DOM shifts.)
+ */
 
 html[data-cursor-dream-skin="1"] {
   --cds-art: none;

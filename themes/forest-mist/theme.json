@@ -1,25 +1,24 @@
 {
   "schemaVersion": 2,
-  "id": "default-atmosphere",
-  "name": "Default Atmosphere",
+  "id": "forest-mist",
+  "name": "Forest Mist",
   "brandSubtitle": "CURSOR SKIN",
-  "tagline": "One image, one mood — code with atmosphere.",
+  "tagline": "Soft green haze for long focus blocks.",
   "wallpaper": {
     "type": "image",
     "src": "wallpaper/main.jpg"
   },
   "preview": "preview.jpg",
-  "appearance": "auto",
   "baseTheme": "Cursor Dark",
   "scheme": "dark",
-  "paletteId": "",
-  "frost": 40,
+  "paletteId": "matcha",
+  "frost": 48,
   "environment": {
-    "opacity": 0.62,
-    "blur": 16
+    "opacity": 0.6,
+    "blur": 18
   },
   "sidebar": {
-    "opacity": 0.42
+    "opacity": 0.44
   },
   "chat": {
     "glass": true
@@ -31,16 +30,10 @@
     "glass": true
   },
   "art": {
-    "focusX": 0.72,
-    "focusY": 0.4,
+    "focusX": 0.7,
+    "focusY": 0.42,
     "safeArea": "left",
     "taskMode": "ambient"
-  },
-  "veil": {
-    "sidebar": 0.28,
-    "auxiliary": 0.26,
-    "editor": 0.32,
-    "composer": 0.22
   },
   "colors": null
 }

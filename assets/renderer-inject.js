@@ -7,8 +7,27 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 41;
+  const VERSION = 43;
+  const RUNTIME_VERSION = "0.3.0";
   const PANEL_V = "15";
+
+  const DEFAULT_SELECTORS = {
+    workbench: ".monaco-workbench",
+    sidebar: ".part.sidebar, nav.ui-sidebar, .ui-sidebar",
+    auxiliarybar: ".part.auxiliarybar",
+    editor: ".part.editor, .part.editorgroupcontainer",
+    editorPanel: '.editor-panel-container, [class*="editor-panel-container"]',
+    chat: '.composer-bar, [class*="composer"], .aichat-pane, .agent-panel',
+    titlebar: ".part.titlebar",
+    statusbar: ".part.statusbar",
+    terminal: '[data-component="terminal-tab-content"], .xterm',
+    browser: '[data-component="browser-tab-content"]',
+    diff: '.diff-tab-content, [id*="tabpanel-editor-panel-group-stable-diff"]',
+    agentsShell: ".workspaces-container, .workspace-container",
+    glassRoot: '[class*="glass-"]',
+  };
+
+  let selectorMap = Object.assign({}, DEFAULT_SELECTORS);
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -1666,9 +1685,15 @@
 
   function apply(config) {
     const cfg = config || {};
+    if (cfg.selectors && typeof cfg.selectors === "object") {
+      selectorMap = Object.assign({}, DEFAULT_SELECTORS, cfg.selectors);
+    }
     frostLevel = readFrostLevel();
     if (typeof cfg.frost === "number" && !Number.isNaN(cfg.frost)) {
       frostLevel = Math.min(100, Math.max(0, Math.round(cfg.frost)));
+      writeFrostLevel(frostLevel);
+    } else if (cfg.frost && typeof cfg.frost === "object" && typeof cfg.frost.level === "number") {
+      frostLevel = Math.min(100, Math.max(0, Math.round(cfg.frost.level)));
       writeFrostLevel(frostLevel);
     }
     ensureStyle(cfg.cssText || "");
@@ -1774,16 +1799,21 @@
         return false;
       }
     }
+    const s = selectorMap || DEFAULT_SELECTORS;
     return {
-      workbench: q(".monaco-workbench"),
-      sidebar: q(".part.sidebar"),
-      auxiliarybar: q(".part.auxiliarybar"),
-      editor: q(".part.editor, .part.editorgroupcontainer"),
-      titlebar: q(".part.titlebar"),
-      statusbar: q(".part.statusbar"),
-      composer: q('.composer-bar, [class*="composer"], .aichat-pane'),
-      agentsShell: q(".workspaces-container, .workspace-container"),
-      glassRoot: q('[class*="glass-"]'),
+      workbench: q(s.workbench || DEFAULT_SELECTORS.workbench),
+      sidebar: q(s.sidebar || DEFAULT_SELECTORS.sidebar),
+      auxiliarybar: q(s.auxiliarybar || DEFAULT_SELECTORS.auxiliarybar),
+      editor: q(s.editor || DEFAULT_SELECTORS.editor),
+      editorPanel: q(s.editorPanel || DEFAULT_SELECTORS.editorPanel),
+      titlebar: q(s.titlebar || DEFAULT_SELECTORS.titlebar),
+      statusbar: q(s.statusbar || DEFAULT_SELECTORS.statusbar),
+      composer: q(s.chat || DEFAULT_SELECTORS.chat),
+      terminal: q(s.terminal || DEFAULT_SELECTORS.terminal),
+      browser: q(s.browser || DEFAULT_SELECTORS.browser),
+      diff: q(s.diff || DEFAULT_SELECTORS.diff),
+      agentsShell: q(s.agentsShell || DEFAULT_SELECTORS.agentsShell),
+      glassRoot: q(s.glassRoot || DEFAULT_SELECTORS.glassRoot),
       skinActive: document.documentElement.getAttribute(MARK) === "1",
       rootPresent: !!document.getElementById(ROOT_ID),
       stylePresent: !!document.getElementById(STYLE_ID),
@@ -1791,10 +1821,65 @@
       scheme: detectScheme(),
       activeThemeId: activeThemeId,
       activePaletteId: activePaletteId,
+      activeThemePackId: activeThemePackId,
       wallpaperLabel: wallpaperLabel,
+      frostLevel: frostLevel,
+      runtimeVersion: RUNTIME_VERSION,
       title: document.title || "",
       bodyClasses: document.body ? String(document.body.className).slice(0, 240) : "",
     };
+  }
+
+  function getState() {
+    return {
+      runtimeVersion: RUNTIME_VERSION,
+      payloadVersion: VERSION,
+      frost: frostLevel,
+      scheme: detectScheme(),
+      themeId: activeThemeId,
+      paletteId: activePaletteId,
+      themePackId: activeThemePackId,
+      wallpaperLabel: wallpaperLabel,
+      skinActive: document.documentElement.getAttribute(MARK) === "1",
+    };
+  }
+
+  /**
+   * Public Skin Runtime API (v0.2). Themes / tools should prefer this over DOM hacks.
+   * Partial apply queues injector work when media/theme-pack changes are requested.
+   */
+  function cursorSkinApply(partial) {
+    const p = partial && typeof partial === "object" ? partial : {};
+    if (typeof p.frost === "number") {
+      applyFrostLevel(p.frost);
+    } else if (p.frost && typeof p.frost === "object") {
+      if (typeof p.frost.level === "number") applyFrostLevel(p.frost.level);
+    }
+    if (typeof p.themePackId === "string" && p.themePackId) {
+      queueThemePack(p.themePackId);
+    }
+    if (typeof p.paletteId === "string" && p.paletteId) {
+      queuePalette(p.paletteId);
+    }
+    if (typeof p.themeId === "string" && p.themeId) {
+      const scheme =
+        p.scheme === "light" || p.scheme === "dark"
+          ? p.scheme
+          : schemeForTheme(p.themeId);
+      queueTheme(p.themeId, scheme);
+    }
+    if (p.wallpaper && typeof p.wallpaper === "object") {
+      const src = p.wallpaper.source || p.wallpaper.path || p.wallpaper.src || "";
+      if (src) {
+        pending.push({
+          type: "wallpaper",
+          path: String(src),
+          name: p.wallpaper.name || "",
+        });
+      }
+    }
+    // Local-only visual refresh (no injector round-trip) for frost already applied.
+    return getState();
   }
 
   global.__cursorDreamSkin = {
@@ -1808,6 +1893,8 @@
     drainRequests: drainRequests,
     themes: THEMES,
     version: VERSION,
+    runtimeVersion: RUNTIME_VERSION,
+    getState: getState,
     _pending: pending,
     get _activeThemeId() {
       return activeThemeId;
@@ -1831,5 +1918,24 @@
       return lastPaletteTokens;
     },
   };
+
+  global.CursorSkin = {
+    version: RUNTIME_VERSION,
+    apply: cursorSkinApply,
+    getState: getState,
+    setFrost: applyFrostLevel,
+    listThemes: function () {
+      return themePackCatalog.slice();
+    },
+    listPalettes: function () {
+      return paletteCatalog.slice();
+    },
+    listBaseThemes: function () {
+      return THEMES.slice();
+    },
+    /** @deprecated internal escape hatch */
+    _legacy: global.__cursorDreamSkin,
+  };
+
   return global.__cursorDreamSkin;
 })(typeof window !== "undefined" ? window : globalThis);

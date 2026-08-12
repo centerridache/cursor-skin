@@ -54,7 +54,11 @@ CSS covers both shells: wallpaper + veil always; part translucency when parts ex
 | `html[data-cds-scheme="light\|dark"]` | Detected appearance |
 | `#cursor-dream-skin-root` | Wallpaper root (createElement only — Trusted Types) |
 | `#cursor-dream-skin-css` | Injected stylesheet |
-| `window.__cursorDreamSkin` | `{ apply, remove, probe }` |
+| `window.CursorSkin` | Public Runtime API v0.2 (`apply`, `getState`, …) |
+| `window.__cursorDreamSkin` | Legacy / injector bridge `{ apply, remove, probe, drainRequests }` |
+
+Authoritative selector map for probe: [`adapters/cursor/default.json`](../adapters/cursor/default.json).
+See also [RUNTIME_API.md](RUNTIME_API.md).
 
 ## Trusted Types note
 

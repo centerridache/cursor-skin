@@ -1,0 +1,20 @@
+{
+  "id": "cursor-default",
+  "cursorVersion": "1.x",
+  "notes": "Authoritative selector map for probe/health. CSS still hardcodes many of these — update both when Cursor DOM shifts.",
+  "selectors": {
+    "workbench": ".monaco-workbench",
+    "sidebar": ".part.sidebar, nav.ui-sidebar, .ui-sidebar",
+    "auxiliarybar": ".part.auxiliarybar",
+    "editor": ".part.editor, .part.editorgroupcontainer",
+    "editorPanel": ".editor-panel-container, [class*=\"editor-panel-container\"]",
+    "chat": ".composer-bar, [class*=\"composer\"], .aichat-pane, .agent-panel",
+    "titlebar": ".part.titlebar",
+    "statusbar": ".part.statusbar",
+    "terminal": "[data-component=\"terminal-tab-content\"], .xterm",
+    "browser": "[data-component=\"browser-tab-content\"]",
+    "diff": ".diff-tab-content, [id*=\"tabpanel-editor-panel-group-stable-diff\"]",
+    "agentsShell": ".workspaces-container, .workspace-container",
+    "glassRoot": "[class*=\"glass-\"]"
+  }
+}

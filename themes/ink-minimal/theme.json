@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "id": "ink-minimal",
+  "name": "Ink Minimal",
+  "brandSubtitle": "CURSOR SKIN",
+  "tagline": "Low-contrast graphite — less chrome, more code.",
+  "wallpaper": {
+    "type": "image",
+    "src": "wallpaper/main.jpg"
+  },
+  "preview": "preview.jpg",
+  "baseTheme": "Cursor Dark",
+  "scheme": "dark",
+  "paletteId": "graphite",
+  "frost": 32,
+  "environment": {
+    "opacity": 0.72,
+    "blur": 12
+  },
+  "sidebar": {
+    "opacity": 0.55
+  },
+  "chat": {
+    "glass": false
+  },
+  "editor": {
+    "transparent": false
+  },
+  "terminal": {
+    "glass": true
+  },
+  "art": {
+    "focusX": 0.75,
+    "focusY": 0.45,
+    "safeArea": "left",
+    "taskMode": "focus"
+  },
+  "veil": {
+    "sidebar": 0.4,
+    "auxiliary": 0.38,
+    "editor": 0.45,
+    "composer": 0.36
+  },
+  "colors": null
+}

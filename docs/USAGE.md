@@ -54,6 +54,33 @@ powershell -NoProfile -File scripts\verify-dream-skin.ps1
 powershell -NoProfile -File scripts\restore-dream-skin.ps1
 ```
 
+## Injector（v0.2 event+health）
+
+日常换肤需要 **injector 守护进程**（媒体服务 + 面板队列）。默认不再 4s 全量轮询：
+
+| 机制 | 默认 | 作用 |
+|------|------|------|
+| CDP Target 发现 | 开启 | 新 workbench 窗口及时注入 |
+| `--drain-ms` | 2000 | 只处理面板队列（换壁纸 / 主题包） |
+| `--health-ms` | 30000 | 稀疏 probe；连续 miss ≥3 再注入 |
+| `--adapter` | `adapters/cursor/default.json` | 选择器兼容层 |
+
+`--poll-ms` 仍可用，会作为 `healthMs` 的别名。`--once` / `--verify` / `--remove` 行为不变。
+
+日志里应看到：`mode=event+health drain=… health=… discover=on|off`。
+
+## Runtime API
+
+注入成功后，在 Cursor DevTools Console：
+
+```js
+CursorSkin.getState()
+CursorSkin.apply({ frost: 40 })
+CursorSkin.listThemes()
+```
+
+完整契约：[RUNTIME_API.md](RUNTIME_API.md)。
+
 ## 面板怎么用
 
 - **收缩**：右下角芯片 `◐ Dream Skin`（可拖）
@@ -79,44 +106,50 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 
 ## Theme packs（主题包）
 
-把「壁纸 + 氛围参数 +（可选）配色」收成可分享的目录，放在仓库根目录 `themes/<id>/`：
+把「工作空间氛围」收成可分享目录（Schema **v2**），放在 `themes/<id>/`。完整契约见 [THEME_SCHEMA.md](THEME_SCHEMA.md)。
 
 ```text
 themes/
   my-pack/
     theme.json
-    wallpaper.jpg      # 或 .mp4 / .webm 等视频
-    preview.jpg        # 可选；没有就用 wallpaper
+    preview.jpg
+    wallpaper/
+      main.jpg         # 或 video
+    README.md          # 可选
 ```
 
-`theme.json` 最小约定：
+`theme.json`（v2）示例：
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "my-pack",
   "name": "My Pack",
-  "wallpaper": { "type": "image", "src": "wallpaper.jpg" },
-  "appearance": "auto",
+  "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+  "preview": "preview.jpg",
   "baseTheme": "Cursor Dark",
   "scheme": "dark",
   "paletteId": "moss-night",
-  "frost": 40,
+  "environment": { "opacity": 0.62, "blur": 16 },
+  "sidebar": { "opacity": 0.42 },
+  "chat": { "glass": true },
+  "editor": { "transparent": true },
+  "terminal": { "glass": true },
   "art": { "focusX": 0.72, "focusY": 0.4 },
-  "veil": { "sidebar": 0.28, "auxiliary": 0.26, "editor": 0.32, "composer": 0.22 },
   "colors": null
 }
 ```
 
 规则：
 
-- `wallpaper.src` 相对主题包目录；`type` 为 `image` 或 `video`
-- `paletteId` 引用全局 `assets/palettes.json` 里已有 id；也可设内联 `colors`（有则优先于 `paletteId`）
-- 运行时壳子（CSS / inject）仍在 `assets/`，主题包只带外观资源
-- 面板 **Skin packs** 会扫描 `themes/*/theme.json` 并一键应用；自定义壁纸仍可用，此时 pack 记为「自定义覆盖」
-- injector 可用 `--themes-dir` 指定目录（默认仓库根 `themes/`）
+- `wallpaper.src` 相对主题包目录；也可用根目录 `wallpaper.jpg`（legacy）
+- 显式 `frost` 优先于 `environment.blur` 推导
+- `paletteId` 引用 `assets/palettes.json`；内联 `colors` 优先
+- 运行时壳子仍在 `assets/`；injector 经 `theme-schema.mjs` normalize 后再 apply
+- 面板 **Skin packs** 扫描 `themes/*/theme.json`
+- `--themes-dir` 可改扫描根目录
 
-示例包：`default-atmosphere`、`moss-night`。
+官方包：`default-atmosphere`、`moss-night`、`cyber-night`、`forest-mist`、`ink-minimal`。
 
 ## 脚本分工（开源维护）
 
@@ -129,16 +162,20 @@ themes/
 
 **运行时（一般不用手点）**
 
-- `scripts/injector.mjs` — CDP 注入与监听  
-- `scripts/media-server.mjs` — 本地媒体  
+- `scripts/theme-schema.mjs` — Theme Schema v1/v2 normalize  
+- `scripts/injector.mjs` — CDP 注入；event+health 守护  
+- `scripts/load-adapter.mjs` — 加载 `adapters/cursor/*.json`  
+- `scripts/media-server.mjs` — 本机 loopback 媒体  
 - `scripts/workshop-resolve.mjs` — Wallpaper Engine 目录解析  
 - `scripts/open-media-dialog.ps1` — 置顶文件/文件夹对话框  
 - `scripts/common-windows.ps1` — 公共 Windows 逻辑  
+- `adapters/cursor/default.json` — 选择器兼容层（Cursor DOM 变了优先改这里）  
 
 **资源**
 
 - `assets/dream-skin.css` / `renderer-inject.js` / `palettes.json` / `theme.json`
-- `themes/<id>/` — 可扫描主题包（见上文）
+- `themes/<id>/` — Schema v2 主题包（见 [THEME_SCHEMA.md](THEME_SCHEMA.md)）
+- [RUNTIME_API.md](RUNTIME_API.md) / [ROADMAP.md](ROADMAP.md) / [THEME_SCHEMA.md](THEME_SCHEMA.md)
 
 ## 常见问题
 

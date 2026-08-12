@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Cursor Dream Skin — CDP injector daemon.
- * Connects to Cursor's loopback debugging port, injects theme CSS + wallpaper.
+ * Cursor Dream Skin — CDP injector daemon (v0.3 Theme Runtime).
+ * Connects to Cursor's loopback debugging port, injects Skin Runtime.
+ * Watch mode: CDP target events + sparse health + light drain (not 4s full poll).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -12,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocket } from "./ws-lite.mjs";
 import { createMediaServer } from "./media-server.mjs";
 import { resolveWallpaperInput, findRepkgExe } from "./workshop-resolve.mjs";
+import { loadAdapter } from "./load-adapter.mjs";
+import { normalizeThemePack, isVideoPath } from "./theme-schema.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,9 +31,13 @@ function parseArgs(argv) {
     port: 9342,
     themeDir: path.join(ROOT, "assets"),
     themesDir: path.join(ROOT, "themes"),
+    adapterPath: path.join(ROOT, "adapters", "cursor", "default.json"),
     stateDir: "",
     settingsPath: "",
-    pollMs: 4000,
+    /** @deprecated use healthMs — kept as fallback alias */
+    pollMs: 0,
+    drainMs: 2000,
+    healthMs: 30000,
     once: false,
     remove: false,
     verify: false,
@@ -47,6 +54,9 @@ function parseArgs(argv) {
     } else if (a === "--themes-dir" && next) {
       out.themesDir = path.resolve(next);
       i++;
+    } else if (a === "--adapter" && next) {
+      out.adapterPath = path.resolve(next);
+      i++;
     } else if (a === "--state-dir" && next) {
       out.stateDir = path.resolve(next);
       i++;
@@ -56,6 +66,12 @@ function parseArgs(argv) {
     } else if (a === "--poll-ms" && next) {
       out.pollMs = Number(next);
       i++;
+    } else if (a === "--drain-ms" && next) {
+      out.drainMs = Number(next);
+      i++;
+    } else if (a === "--health-ms" && next) {
+      out.healthMs = Number(next);
+      i++;
     } else if (a === "--once") {
       out.once = true;
     } else if (a === "--remove") {
@@ -63,6 +79,9 @@ function parseArgs(argv) {
     } else if (a === "--verify") {
       out.verify = true;
     }
+  }
+  if (out.pollMs > 0 && out.healthMs === 30000) {
+    out.healthMs = out.pollMs;
   }
   return out;
 }
@@ -126,6 +145,7 @@ class CdpSession {
     this.ws = null;
     this.nextId = 1;
     this.pending = new Map();
+    this.eventHandlers = new Map();
   }
 
   connect() {
@@ -140,6 +160,19 @@ class CdpSession {
         } catch {
           return;
         }
+        if (msg.method) {
+          const set = this.eventHandlers.get(msg.method);
+          if (set) {
+            for (const fn of set) {
+              try {
+                fn(msg.params || {});
+              } catch {
+                /* ignore listener errors */
+              }
+            }
+          }
+          return;
+        }
         if (msg.id != null && this.pending.has(msg.id)) {
           const { resolve: res, reject: rej } = this.pending.get(msg.id);
           this.pending.delete(msg.id);
@@ -148,6 +181,12 @@ class CdpSession {
         }
       });
     });
+  }
+
+  onEvent(method, fn) {
+    if (!this.eventHandlers.has(method)) this.eventHandlers.set(method, new Set());
+    this.eventHandlers.get(method).add(fn);
+    return () => this.eventHandlers.get(method)?.delete(fn);
   }
 
   send(method, params = {}) {
@@ -269,37 +308,40 @@ function loadThemePackFromDir(dir) {
   if (!fs.existsSync(themePath)) return null;
   const raw = readJsonSafe(themePath);
   if (!raw || typeof raw !== "object") return null;
-  const id = String(raw.id || path.basename(dir)).trim();
-  const name = String(raw.name || id).trim();
-  if (!id || !name) return null;
-  const wp = raw.wallpaper && typeof raw.wallpaper === "object" ? raw.wallpaper : {};
-  const src = String(wp.src || raw.image || "").trim();
-  if (!src) return null;
-  const wallPath = path.resolve(dir, src);
-  if (!fs.existsSync(wallPath)) return null;
+  const norm = normalizeThemePack(raw, { dirName: path.basename(dir) });
+  if (!norm.ok) {
+    log(`theme pack skip ${path.basename(dir)}: ${norm.reason}`);
+    return null;
+  }
+  const wallPath = path.resolve(dir, norm.wallpaperSrc);
+  if (!fs.existsSync(wallPath)) {
+    log(`theme pack skip ${norm.id}: missing wallpaper ${norm.wallpaperSrc}`);
+    return null;
+  }
   const ext = path.extname(wallPath).toLowerCase();
   const type =
-    wp.type === "video" || VIDEO_EXTS.has(ext)
+    norm.wallpaperTypeHint === "video" || VIDEO_EXTS.has(ext) || isVideoPath(wallPath)
       ? "video"
       : "image";
-  const previewRel = String(raw.preview || src).trim();
-  const previewPath = path.resolve(dir, previewRel);
+  const previewPath = path.resolve(dir, norm.previewRel);
   return {
-    id,
-    name,
+    id: norm.id,
+    name: norm.name,
     dir,
-    tagline: String(raw.tagline || ""),
-    brandSubtitle: String(raw.brandSubtitle || ""),
+    schemaVersion: norm.schemaVersion,
+    tagline: norm.tagline,
+    brandSubtitle: norm.brandSubtitle,
     wallpaperType: type,
     wallpaperPath: wallPath,
     previewPath: fs.existsSync(previewPath) ? previewPath : wallPath,
-    baseTheme: raw.baseTheme || "Cursor Dark",
-    scheme: raw.scheme === "light" ? "light" : "dark",
-    paletteId: String(raw.paletteId || ""),
-    frost: typeof raw.frost === "number" ? Math.min(100, Math.max(0, Math.round(raw.frost))) : null,
-    art: raw.art && typeof raw.art === "object" ? raw.art : null,
-    veil: raw.veil && typeof raw.veil === "object" ? raw.veil : null,
-    colors: raw.colors && typeof raw.colors === "object" ? raw.colors : null,
+    baseTheme: norm.baseTheme,
+    scheme: norm.scheme,
+    paletteId: norm.paletteId,
+    frost: norm.frost,
+    art: norm.art,
+    veil: norm.veil,
+    colors: norm.colors,
+    workspace: norm.workspace,
   };
 }
 
@@ -333,6 +375,7 @@ function themePackCatalog(packs) {
     name: p.name,
     tagline: p.tagline || "",
     scheme: p.scheme || "dark",
+    schemaVersion: p.schemaVersion || 1,
   }));
 }
 
@@ -825,6 +868,73 @@ async function listTargets(port) {
   return Array.isArray(list) ? list : [];
 }
 
+async function getBrowserWsUrl(port) {
+  try {
+    const ver = await fetchJson(`http://127.0.0.1:${port}/json/version`);
+    const url = ver?.webSocketDebuggerUrl;
+    if (url && isLoopbackWs(url, port)) return url;
+  } catch {
+    /* fall through */
+  }
+  const list = await listTargets(port);
+  const browser = list.find((t) => t && t.type === "browser" && t.webSocketDebuggerUrl);
+  if (browser && isLoopbackWs(browser.webSocketDebuggerUrl, port)) {
+    return browser.webSocketDebuggerUrl;
+  }
+  return "";
+}
+
+function isWorkbenchTargetInfo(info) {
+  if (!info) return false;
+  const type = String(info.type || "");
+  if (type && type !== "page") return false;
+  const url = String(info.url || "").toLowerCase();
+  return url.includes("workbench");
+}
+
+/**
+ * Long-lived CDP session on the browser target for Target.* discovery events.
+ * Only reacts to meaningful workbench create / first-workbench URL — ignores noisy targetInfoChanged spam.
+ */
+async function connectTargetDiscovery(port, onWorkbenchHint) {
+  const wsUrl = await getBrowserWsUrl(port);
+  if (!wsUrl) return null;
+  const session = new CdpSession(wsUrl);
+  await session.connect();
+  const knownWorkbench = new Set();
+  const notifyCreated = (info) => {
+    if (!isWorkbenchTargetInfo(info)) return;
+    const id = info.targetId || info.id || "";
+    if (id && knownWorkbench.has(id)) return;
+    if (id) knownWorkbench.add(id);
+    try {
+      onWorkbenchHint("created", info);
+    } catch {
+      /* ignore */
+    }
+  };
+  session.onEvent("Target.targetCreated", (p) => notifyCreated(p.targetInfo));
+  session.onEvent("Target.targetInfoChanged", (p) => {
+    const info = p.targetInfo;
+    if (!isWorkbenchTargetInfo(info)) return;
+    const id = info?.targetId || info?.id || "";
+    // Only when a target newly becomes a workbench page (e.g. blank → workbench).
+    if (id && knownWorkbench.has(id)) return;
+    notifyCreated(info);
+  });
+  session.onEvent("Target.targetDestroyed", (p) => {
+    const id = p.targetId;
+    if (id) knownWorkbench.delete(id);
+    try {
+      onWorkbenchHint("destroyed", { targetId: id });
+    } catch {
+      /* ignore */
+    }
+  });
+  await session.send("Target.setDiscoverTargets", { discover: true });
+  return session;
+}
+
 async function waitForTargets(port, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -861,11 +971,17 @@ function makeApplyConfig(themeBundle, extra = {}) {
     imageUrl: "",
     posterKey: "",
     posterDataUrl: "",
+    selectors: themeBundle.selectors || {},
+    runtimeVersion: themeBundle.runtimeVersion || "0.3.0",
     ...extra,
     art: extra.art || themeBundle.theme.art || {},
     veil: extra.veil || themeBundle.theme.veil || {},
     themePacks: Array.isArray(extra.themePacks) ? extra.themePacks : [],
     themePackId: typeof extra.themePackId === "string" ? extra.themePackId : "",
+    selectors:
+      extra.selectors && typeof extra.selectors === "object"
+        ? extra.selectors
+        : themeBundle.selectors || {},
     resetWallpaper,
     skipMediaReload: extra.skipMediaReload === true,
     // If custom already on screen and this payload has no custom URLs, don't fall back to default-only.
@@ -1049,7 +1165,13 @@ async function main() {
 
   const wallMeta = loadActiveWallpaperPath(args.stateDir);
   // Always keep bundled default as CSS poster; custom media streams from loopback
+  const adapter = loadAdapter(args.adapterPath);
   let themeBundle = readTheme(args.themeDir, null);
+  themeBundle.selectors = adapter.selectors;
+  themeBundle.runtimeVersion = "0.3.0";
+  log(
+    `adapter=${adapter.id} cursor=${adapter.cursorVersion}${adapter.path ? " file=" + path.basename(adapter.path) : ""}`
+  );
   const themePacks = scanThemePacks(args.themesDir);
   log(
     `theme packs: ${themePacks.length}${
@@ -1156,6 +1278,8 @@ async function main() {
     veil: packVeil || undefined,
     frost: packFrost,
     paletteTokens: packInlineColors || undefined,
+    selectors: adapter.selectors,
+    runtimeVersion: "0.3.0",
     ...more,
   });
 
@@ -1206,371 +1330,365 @@ async function main() {
   }
 
   const seen = new Map();
-  const missStreak = new Map(); // targetId -> consecutive failed probes
+  const missStreak = new Map();
   for (const t of pages) seen.set(t.id, Date.now());
 
-  log(`watching every ${args.pollMs}ms (Ctrl+C to stop)`);
-  const timer = setInterval(async () => {
+  const bindBundle = (bundle) => {
+    themeBundle = bundle;
+    themeBundle.selectors = adapter.selectors;
+    themeBundle.runtimeVersion = "0.3.0";
+  };
+
+  let busyDrain = false;
+  let busyHealth = false;
+  let discoverSession = null;
+  let hintTimer = null;
+
+  async function processQueuedRequests(reqs, list) {
+    let needFullReapply = false;
+    for (const req of reqs) {
+      if (req.type === "theme" && req.themeId) {
+        currentThemeId = req.themeId;
+        currentScheme = req.scheme === "light" ? "light" : "dark";
+        currentPaletteId = "";
+        if (args.settingsPath) {
+          writeAppearance(args.settingsPath, {
+            colorTheme: currentThemeId,
+            clearPalette: true,
+            paletteId: "",
+          });
+          log(`theme -> ${currentThemeId}`);
+        }
+        if (args.stateDir) {
+          try {
+            fs.unlinkSync(paletteMetaPath(args.stateDir));
+          } catch {
+            /* ignore */
+          }
+        }
+        await appearanceAll(list, args.port, themeBundle, buildExtra({
+          paletteId: "",
+        }));
+      } else if (req.type === "palette" && req.paletteId) {
+        const pal = findPalette(themeBundle.paletteDoc, req.paletteId);
+        if (!pal) {
+          log(`unknown palette ${req.paletteId}`);
+          continue;
+        }
+        currentPaletteId = pal.id;
+        currentThemeId = pal.baseTheme || "Cursor Dark";
+        currentScheme = pal.scheme === "light" ? "light" : "dark";
+        const tokens = {
+          ...(themeBundle.paletteDoc.titleBar || {}),
+          ...(pal.tokens || {}),
+        };
+        if (args.settingsPath) {
+          writeAppearance(args.settingsPath, {
+            colorTheme: currentThemeId,
+            tokens,
+            paletteId: pal.id,
+          });
+          log(`palette -> ${pal.id} (${currentThemeId})`);
+        }
+        if (args.stateDir) {
+          fs.writeFileSync(
+            paletteMetaPath(args.stateDir),
+            JSON.stringify(
+              {
+                paletteId: pal.id,
+                updatedAt: new Date().toISOString(),
+              },
+              null,
+              2
+            ) + "\n"
+          );
+        }
+        await appearanceAll(list, args.port, themeBundle, buildExtra());
+      } else if (req.type === "theme-pack" && req.packId) {
+        const pack = findThemePack(themePacks, req.packId);
+        if (!pack) {
+          log(`unknown theme pack ${req.packId}`);
+          continue;
+        }
+        try {
+          const applied = await applyThemePackMedia(args.stateDir, pack);
+          videoUrl = applied.videoUrl;
+          imageUrl = applied.imageUrl;
+          wallpaperLabel = applied.wallpaperLabel;
+          mediaEpoch = applied.mediaEpoch;
+          posterKey = applied.posterKey;
+          currentThemePackId = pack.id;
+          packCustomOverride = false;
+          packArt = pack.art;
+          packVeil = pack.veil;
+          packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
+          packInlineColors = pack.colors || null;
+          currentThemeId = pack.baseTheme || "Cursor Dark";
+          currentScheme = pack.scheme === "light" ? "light" : "dark";
+          if (pack.colors) {
+            currentPaletteId = "";
+            if (args.settingsPath) {
+              writeAppearance(args.settingsPath, {
+                colorTheme: currentThemeId,
+                tokens: {
+                  ...(themeBundle.paletteDoc.titleBar || {}),
+                  ...pack.colors,
+                },
+                paletteId: "",
+              });
+            }
+            if (args.stateDir) {
+              try {
+                fs.unlinkSync(paletteMetaPath(args.stateDir));
+              } catch {
+                /* ignore */
+              }
+            }
+          } else if (pack.paletteId) {
+            const pal = findPalette(themeBundle.paletteDoc, pack.paletteId);
+            if (pal) {
+              currentPaletteId = pal.id;
+              currentThemeId = pal.baseTheme || currentThemeId;
+              currentScheme = pal.scheme === "light" ? "light" : "dark";
+              const tokens = {
+                ...(themeBundle.paletteDoc.titleBar || {}),
+                ...(pal.tokens || {}),
+              };
+              if (args.settingsPath) {
+                writeAppearance(args.settingsPath, {
+                  colorTheme: currentThemeId,
+                  tokens,
+                  paletteId: pal.id,
+                });
+              }
+              if (args.stateDir) {
+                fs.writeFileSync(
+                  paletteMetaPath(args.stateDir),
+                  JSON.stringify(
+                    {
+                      paletteId: pal.id,
+                      updatedAt: new Date().toISOString(),
+                    },
+                    null,
+                    2
+                  ) + "\n"
+                );
+              }
+            } else {
+              currentPaletteId = "";
+              log(`theme pack palette missing: ${pack.paletteId}`);
+            }
+          } else {
+            currentPaletteId = "";
+            if (args.settingsPath) {
+              writeAppearance(args.settingsPath, {
+                colorTheme: currentThemeId,
+                clearPalette: true,
+                paletteId: "",
+              });
+            }
+            if (args.stateDir) {
+              try {
+                fs.unlinkSync(paletteMetaPath(args.stateDir));
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+          writeActiveThemePack(args.stateDir, {
+            packId: pack.id,
+            customOverride: false,
+          });
+          needFullReapply = true;
+          log(`theme-pack -> ${pack.id}`);
+        } catch (e) {
+          log(`theme-pack fail: ${e.message || e}`);
+        }
+      } else if (req.type === "wallpaper" && req.path) {
+        try {
+          const applied = await applyWallpaperPath(
+            args.stateDir,
+            args.themeDir,
+            req.path,
+            req.name
+          );
+          bindBundle(applied.themeBundle);
+          videoUrl = applied.videoUrl;
+          imageUrl = applied.imageUrl;
+          wallpaperLabel = applied.wallpaperLabel;
+          mediaEpoch = applied.mediaEpoch || Date.now();
+          posterKey = applied.posterKey || mediaPosterKey(applied.meta);
+          packCustomOverride = true;
+          writeActiveThemePack(args.stateDir, {
+            packId: currentThemePackId,
+            customOverride: true,
+          });
+          needFullReapply = true;
+          log(
+            `${applied.meta.kind} -> ${wallpaperLabel} (${applied.meta.size} bytes)`
+          );
+        } catch (e) {
+          log(`wallpaper fail: ${e.message || e}`);
+        }
+      } else if (req.type === "wallpaper-browse" || req.type === "wallpaper-browse-folder") {
+        try {
+          const folder = req.type === "wallpaper-browse-folder";
+          log(
+            folder
+              ? "wallpaper-browse-folder: opening..."
+              : "wallpaper-browse: opening system dialog..."
+          );
+          const chosen = await nativeOpenMediaDialog({ folder });
+          if (!chosen) {
+            log("wallpaper-browse: cancelled");
+          } else {
+            log(`wallpaper-browse picked: ${chosen}`);
+            try {
+              const st = fs.statSync(chosen);
+              log(
+                `wallpaper-browse stat: isFile=${st.isFile()} size=${st.size}`
+              );
+            } catch (se) {
+              log(`wallpaper-browse stat fail: ${se.message || se}`);
+            }
+            const applied = await applyWallpaperPath(
+              args.stateDir,
+              args.themeDir,
+              chosen,
+              ""
+            );
+            bindBundle(applied.themeBundle);
+            videoUrl = applied.videoUrl;
+            imageUrl = applied.imageUrl;
+            wallpaperLabel = applied.wallpaperLabel;
+            mediaEpoch = applied.mediaEpoch || Date.now();
+            posterKey = applied.posterKey || mediaPosterKey(applied.meta);
+            packCustomOverride = true;
+            writeActiveThemePack(args.stateDir, {
+              packId: currentThemePackId,
+              customOverride: true,
+            });
+            needFullReapply = true;
+            log(
+              `wallpaper-browse -> ${wallpaperLabel} (${applied.meta.size} bytes) video=${videoUrl ? "on" : "off"}`
+            );
+          }
+        } catch (e) {
+          const msg = e && e.message ? e.message : String(e);
+          log(`wallpaper-browse fail: ${msg}`);
+          wallpaperLabel = "Upload failed";
+          needFullReapply = true;
+        }
+      } else if (req.type === "wallpaper-data" && req.base64) {
+        try {
+          const meta = installWallpaperFromData(args.stateDir, {
+            base64: req.base64,
+            mime: req.mime,
+            name: req.name,
+          });
+          bindBundle(readTheme(args.themeDir, null));
+          videoUrl = "";
+          imageUrl = await ensureMediaForMeta(meta);
+          wallpaperLabel = meta.name || "Custom";
+          mediaEpoch = Date.now();
+          posterKey = mediaPosterKey(meta);
+          packCustomOverride = true;
+          writeActiveThemePack(args.stateDir, {
+            packId: currentThemePackId,
+            customOverride: true,
+          });
+          needFullReapply = true;
+          log(`wallpaper-data -> ${wallpaperLabel} (${meta.size} bytes)`);
+        } catch (e) {
+          log(`wallpaper-data fail: ${e.message || e}`);
+        }
+      } else if (req.type === "wallpaper-reset") {
+        const pack = findThemePack(themePacks, currentThemePackId);
+        if (pack) {
+          try {
+            const applied = await applyThemePackMedia(args.stateDir, pack);
+            videoUrl = applied.videoUrl;
+            imageUrl = applied.imageUrl;
+            wallpaperLabel = applied.wallpaperLabel;
+            mediaEpoch = applied.mediaEpoch;
+            posterKey = applied.posterKey;
+            packCustomOverride = false;
+            packArt = pack.art;
+            packVeil = pack.veil;
+            packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
+            writeActiveThemePack(args.stateDir, {
+              packId: pack.id,
+              customOverride: false,
+            });
+            needFullReapply = true;
+            log(`wallpaper-reset -> pack ${pack.id}`);
+          } catch (e) {
+            log(`wallpaper-reset pack fail: ${e.message || e}`);
+          }
+        } else {
+          resetWallpaper(args.stateDir);
+          bindBundle(readTheme(args.themeDir, null));
+          videoUrl = "";
+          imageUrl = "";
+          wallpaperLabel = "Default";
+          mediaEpoch = Date.now();
+          posterKey = "";
+          currentThemePackId = "";
+          packCustomOverride = false;
+          packArt = null;
+          packVeil = null;
+          packFrost = undefined;
+          packInlineColors = null;
+          writeActiveThemePack(args.stateDir, { packId: "", customOverride: false });
+          needFullReapply = true;
+          log("wallpaper -> Default");
+        }
+      }
+    }
+    if (needFullReapply) {
+      await reapplyAll(list, args.port, themeBundle, buildExtra({
+        resetWallpaper: !videoUrl && !imageUrl && wallpaperLabel === "Default",
+      }));
+    }
+  }
+
+  async function drainPass() {
+    if (busyDrain) return;
+    busyDrain = true;
     try {
       const list = (await listTargets(args.port)).filter(isWorkbenchTarget);
       for (const t of list) {
         const isNew = !seen.has(t.id);
         seen.set(t.id, Date.now());
-
+        if (isNew) {
+          missStreak.set(t.id, 0);
+          log(`re-apply ${t.id} (new)`);
+          try {
+            await injectTarget(t, args.port, themeBundle, "apply", buildExtra());
+          } catch (e) {
+            log(`re-apply fail ${t.id}: ${e.message || e}`);
+          }
+        }
         try {
           const reqs = await injectTarget(t, args.port, themeBundle, "drain");
           if (Array.isArray(reqs) && reqs.length) {
-            let needFullReapply = false;
-            for (const req of reqs) {
-              if (req.type === "theme" && req.themeId) {
-                currentThemeId = req.themeId;
-                currentScheme = req.scheme === "light" ? "light" : "dark";
-                currentPaletteId = "";
-                if (args.settingsPath) {
-                  writeAppearance(args.settingsPath, {
-                    colorTheme: currentThemeId,
-                    clearPalette: true,
-                    paletteId: "",
-                  });
-                  log(`theme -> ${currentThemeId}`);
-                }
-                if (args.stateDir) {
-                  try {
-                    fs.unlinkSync(paletteMetaPath(args.stateDir));
-                  } catch {
-                    /* ignore */
-                  }
-                }
-                await appearanceAll(list, args.port, themeBundle, buildExtra({
-                  paletteId: "",
-                }));
-              } else if (req.type === "palette" && req.paletteId) {
-                const pal = findPalette(themeBundle.paletteDoc, req.paletteId);
-                if (!pal) {
-                  log(`unknown palette ${req.paletteId}`);
-                  continue;
-                }
-                currentPaletteId = pal.id;
-                currentThemeId = pal.baseTheme || "Cursor Dark";
-                currentScheme = pal.scheme === "light" ? "light" : "dark";
-                const tokens = {
-                  ...(themeBundle.paletteDoc.titleBar || {}),
-                  ...(pal.tokens || {}),
-                };
-                if (args.settingsPath) {
-                  writeAppearance(args.settingsPath, {
-                    colorTheme: currentThemeId,
-                    tokens,
-                    paletteId: pal.id,
-                  });
-                  log(`palette -> ${pal.id} (${currentThemeId})`);
-                }
-                if (args.stateDir) {
-                  fs.writeFileSync(
-                    paletteMetaPath(args.stateDir),
-                    JSON.stringify(
-                      {
-                        paletteId: pal.id,
-                        updatedAt: new Date().toISOString(),
-                      },
-                      null,
-                      2
-                    ) + "\n"
-                  );
-                }
-                await appearanceAll(list, args.port, themeBundle, buildExtra());
-              } else if (req.type === "theme-pack" && req.packId) {
-                const pack = findThemePack(themePacks, req.packId);
-                if (!pack) {
-                  log(`unknown theme pack ${req.packId}`);
-                  continue;
-                }
-                try {
-                  const applied = await applyThemePackMedia(args.stateDir, pack);
-                  videoUrl = applied.videoUrl;
-                  imageUrl = applied.imageUrl;
-                  wallpaperLabel = applied.wallpaperLabel;
-                  mediaEpoch = applied.mediaEpoch;
-                  posterKey = applied.posterKey;
-                  currentThemePackId = pack.id;
-                  packCustomOverride = false;
-                  packArt = pack.art;
-                  packVeil = pack.veil;
-                  packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
-                  packInlineColors = pack.colors || null;
-                  currentThemeId = pack.baseTheme || "Cursor Dark";
-                  currentScheme = pack.scheme === "light" ? "light" : "dark";
-                  if (pack.colors) {
-                    currentPaletteId = "";
-                    if (args.settingsPath) {
-                      writeAppearance(args.settingsPath, {
-                        colorTheme: currentThemeId,
-                        tokens: {
-                          ...(themeBundle.paletteDoc.titleBar || {}),
-                          ...pack.colors,
-                        },
-                        paletteId: "",
-                      });
-                    }
-                    if (args.stateDir) {
-                      try {
-                        fs.unlinkSync(paletteMetaPath(args.stateDir));
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  } else if (pack.paletteId) {
-                    const pal = findPalette(themeBundle.paletteDoc, pack.paletteId);
-                    if (pal) {
-                      currentPaletteId = pal.id;
-                      currentThemeId = pal.baseTheme || currentThemeId;
-                      currentScheme = pal.scheme === "light" ? "light" : "dark";
-                      const tokens = {
-                        ...(themeBundle.paletteDoc.titleBar || {}),
-                        ...(pal.tokens || {}),
-                      };
-                      if (args.settingsPath) {
-                        writeAppearance(args.settingsPath, {
-                          colorTheme: currentThemeId,
-                          tokens,
-                          paletteId: pal.id,
-                        });
-                      }
-                      if (args.stateDir) {
-                        fs.writeFileSync(
-                          paletteMetaPath(args.stateDir),
-                          JSON.stringify(
-                            {
-                              paletteId: pal.id,
-                              updatedAt: new Date().toISOString(),
-                            },
-                            null,
-                            2
-                          ) + "\n"
-                        );
-                      }
-                    } else {
-                      currentPaletteId = "";
-                      log(`theme pack palette missing: ${pack.paletteId}`);
-                    }
-                  } else {
-                    currentPaletteId = "";
-                    if (args.settingsPath) {
-                      writeAppearance(args.settingsPath, {
-                        colorTheme: currentThemeId,
-                        clearPalette: true,
-                        paletteId: "",
-                      });
-                    }
-                    if (args.stateDir) {
-                      try {
-                        fs.unlinkSync(paletteMetaPath(args.stateDir));
-                      } catch {
-                        /* ignore */
-                      }
-                    }
-                  }
-                  writeActiveThemePack(args.stateDir, {
-                    packId: pack.id,
-                    customOverride: false,
-                  });
-                  needFullReapply = true;
-                  log(`theme-pack -> ${pack.id}`);
-                } catch (e) {
-                  log(`theme-pack fail: ${e.message || e}`);
-                }
-              } else if (
-                req.type === "wallpaper" &&
-                req.path
-              ) {
-                try {
-                  const applied = await applyWallpaperPath(
-                    args.stateDir,
-                    args.themeDir,
-                    req.path,
-                    req.name
-                  );
-                  themeBundle = applied.themeBundle;
-                  videoUrl = applied.videoUrl;
-                  imageUrl = applied.imageUrl;
-                  wallpaperLabel = applied.wallpaperLabel;
-                  mediaEpoch = applied.mediaEpoch || Date.now();
-                  posterKey = applied.posterKey || mediaPosterKey(applied.meta);
-                  packCustomOverride = true;
-                  writeActiveThemePack(args.stateDir, {
-                    packId: currentThemePackId,
-                    customOverride: true,
-                  });
-                  needFullReapply = true;
-                  log(
-                    `${applied.meta.kind} -> ${wallpaperLabel} (${applied.meta.size} bytes)`
-                  );
-                } catch (e) {
-                  log(`wallpaper fail: ${e.message || e}`);
-                }
-              } else if (req.type === "wallpaper-browse" || req.type === "wallpaper-browse-folder") {
-                try {
-                  const folder = req.type === "wallpaper-browse-folder";
-                  log(
-                    folder
-                      ? "wallpaper-browse-folder: opening..."
-                      : "wallpaper-browse: opening system dialog..."
-                  );
-                  const chosen = await nativeOpenMediaDialog({ folder });
-                  if (!chosen) {
-                    log("wallpaper-browse: cancelled");
-                  } else {
-                    log(`wallpaper-browse picked: ${chosen}`);
-                    try {
-                      const st = fs.statSync(chosen);
-                      log(
-                        `wallpaper-browse stat: isFile=${st.isFile()} size=${st.size}`
-                      );
-                    } catch (se) {
-                      log(`wallpaper-browse stat fail: ${se.message || se}`);
-                    }
-                    const applied = await applyWallpaperPath(
-                      args.stateDir,
-                      args.themeDir,
-                      chosen,
-                      ""
-                    );
-                    themeBundle = applied.themeBundle;
-                    videoUrl = applied.videoUrl;
-                    imageUrl = applied.imageUrl;
-                    wallpaperLabel = applied.wallpaperLabel;
-                    mediaEpoch = applied.mediaEpoch || Date.now();
-                    posterKey = applied.posterKey || mediaPosterKey(applied.meta);
-                    packCustomOverride = true;
-                    writeActiveThemePack(args.stateDir, {
-                      packId: currentThemePackId,
-                      customOverride: true,
-                    });
-                    needFullReapply = true;
-                    log(
-                      `wallpaper-browse -> ${wallpaperLabel} (${applied.meta.size} bytes) video=${videoUrl ? "on" : "off"}`
-                    );
-                  }
-                } catch (e) {
-                  const msg = e && e.message ? e.message : String(e);
-                  log(`wallpaper-browse fail: ${msg}`);
-                  wallpaperLabel = "Upload failed";
-                  needFullReapply = true;
-                }
-              } else if (req.type === "wallpaper-data" && req.base64) {
-                try {
-                  const meta = installWallpaperFromData(args.stateDir, {
-                    base64: req.base64,
-                    mime: req.mime,
-                    name: req.name,
-                  });
-                  themeBundle = readTheme(args.themeDir, null);
-                  videoUrl = "";
-                  imageUrl = await ensureMediaForMeta(meta);
-                  wallpaperLabel = meta.name || "Custom";
-                  mediaEpoch = Date.now();
-                  posterKey = mediaPosterKey(meta);
-                  packCustomOverride = true;
-                  writeActiveThemePack(args.stateDir, {
-                    packId: currentThemePackId,
-                    customOverride: true,
-                  });
-                  needFullReapply = true;
-                  log(`wallpaper-data -> ${wallpaperLabel} (${meta.size} bytes)`);
-                } catch (e) {
-                  log(`wallpaper-data fail: ${e.message || e}`);
-                }
-              } else if (req.type === "wallpaper-reset") {
-                const pack = findThemePack(themePacks, currentThemePackId);
-                if (pack) {
-                  try {
-                    const applied = await applyThemePackMedia(args.stateDir, pack);
-                    videoUrl = applied.videoUrl;
-                    imageUrl = applied.imageUrl;
-                    wallpaperLabel = applied.wallpaperLabel;
-                    mediaEpoch = applied.mediaEpoch;
-                    posterKey = applied.posterKey;
-                    packCustomOverride = false;
-                    packArt = pack.art;
-                    packVeil = pack.veil;
-                    packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
-                    writeActiveThemePack(args.stateDir, {
-                      packId: pack.id,
-                      customOverride: false,
-                    });
-                    needFullReapply = true;
-                    log(`wallpaper-reset -> pack ${pack.id}`);
-                  } catch (e) {
-                    log(`wallpaper-reset pack fail: ${e.message || e}`);
-                  }
-                } else {
-                  resetWallpaper(args.stateDir);
-                  themeBundle = readTheme(args.themeDir, null);
-                  videoUrl = "";
-                  imageUrl = "";
-                  wallpaperLabel = "Default";
-                  mediaEpoch = Date.now();
-                  posterKey = "";
-                  currentThemePackId = "";
-                  packCustomOverride = false;
-                  packArt = null;
-                  packVeil = null;
-                  packFrost = undefined;
-                  packInlineColors = null;
-                  writeActiveThemePack(args.stateDir, { packId: "", customOverride: false });
-                  needFullReapply = true;
-                  log("wallpaper -> Default");
-                }
-              }
-              // wallpaper* handlers set needFullReapply; theme/palette use appearanceAll only
-            }
-            if (needFullReapply) {
-              await reapplyAll(list, args.port, themeBundle, buildExtra({
-                resetWallpaper: !videoUrl && !imageUrl && wallpaperLabel === "Default",
-              }));
-            }
+            await processQueuedRequests(reqs, list);
           }
         } catch (e) {
           log(`drain fail: ${e.message || e}`);
         }
-
-        let needs = isNew;
-        if (!needs) {
-          try {
-            const probe = await injectTarget(t, args.port, themeBundle, "verify");
-            const healthy =
-              probe?.skinActive && probe?.rootPresent && probe?.hudPresent;
-            if (healthy) {
-              missStreak.set(t.id, 0);
-            } else {
-              const n = (missStreak.get(t.id) || 0) + 1;
-              missStreak.set(t.id, n);
-              // Require a few misses — one CDP glitch must not remount a 4K blob (white flash).
-              needs = n >= 3;
-              if (n === 1 || n === 2) {
-                log(`probe soft-miss ${t.id} streak=${n}`);
-              }
-            }
-          } catch {
-            const n = (missStreak.get(t.id) || 0) + 1;
-            missStreak.set(t.id, n);
-            needs = n >= 3;
-          }
-        }
-        if (needs) {
-          missStreak.set(t.id, 0);
-          log(`re-apply ${t.id}${isNew ? " (new)" : ""}`);
-          await injectTarget(t, args.port, themeBundle, "apply", buildExtra());
-        }
       }
       const live = new Set(list.map((t) => t.id));
       for (const id of [...seen.keys()]) {
-        if (!live.has(id)) seen.delete(id);
+        if (!live.has(id)) {
+          seen.delete(id);
+          missStreak.delete(id);
+        }
       }
       writeState(args.stateDir, {
         pid: process.pid,
         port: args.port,
-        mode: "watch",
+        mode: "event+health",
         themeId: themeBundle.theme.id,
         colorTheme: currentThemeId,
         paletteId: currentPaletteId,
@@ -1578,14 +1696,110 @@ async function main() {
         videoUrl: videoUrl ? "on" : "",
         imageUrl: imageUrl ? "on" : "",
         targets: [...live],
+        drainMs: args.drainMs,
+        healthMs: args.healthMs,
       });
     } catch (e) {
-      log(`watch error: ${e.message || e}`);
+      log(`drain pass error: ${e.message || e}`);
+    } finally {
+      busyDrain = false;
     }
-  }, args.pollMs);
+  }
+
+  async function healthPass() {
+    if (busyHealth) return;
+    busyHealth = true;
+    try {
+      const list = (await listTargets(args.port)).filter(isWorkbenchTarget);
+      for (const t of list) {
+        if (!seen.has(t.id)) {
+          seen.set(t.id, Date.now());
+          log(`re-apply ${t.id} (new/health)`);
+          await injectTarget(t, args.port, themeBundle, "apply", buildExtra());
+          missStreak.set(t.id, 0);
+          continue;
+        }
+        let needs = false;
+        try {
+          const probe = await injectTarget(t, args.port, themeBundle, "verify");
+          const healthy =
+            probe?.skinActive && probe?.rootPresent && probe?.hudPresent;
+          if (healthy) {
+            missStreak.set(t.id, 0);
+          } else {
+            const n = (missStreak.get(t.id) || 0) + 1;
+            missStreak.set(t.id, n);
+            needs = n >= 3;
+            if (n === 1 || n === 2) {
+              log(`probe soft-miss ${t.id} streak=${n}`);
+            }
+          }
+        } catch {
+          const n = (missStreak.get(t.id) || 0) + 1;
+          missStreak.set(t.id, n);
+          needs = n >= 3;
+        }
+        if (needs) {
+          missStreak.set(t.id, 0);
+          log(`re-apply ${t.id}`);
+          await injectTarget(t, args.port, themeBundle, "apply", buildExtra());
+        }
+      }
+    } catch (e) {
+      log(`health pass error: ${e.message || e}`);
+    } finally {
+      busyHealth = false;
+    }
+  }
+
+  function scheduleHintPass(reason) {
+    if (hintTimer) clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => {
+      hintTimer = null;
+      log(`target event -> drain (${reason})`);
+      drainPass().catch((e) => log(`hint drain: ${e.message || e}`));
+    }, 1200);
+  }
+
+  try {
+    discoverSession = await connectTargetDiscovery(args.port, (reason, info) => {
+      if (reason === "destroyed") {
+        const id = info?.targetId;
+        if (id && seen.has(id)) {
+          seen.delete(id);
+          missStreak.delete(id);
+          log(`target destroyed ${id}`);
+        }
+        return;
+      }
+      scheduleHintPass(reason);
+    });
+  } catch (e) {
+    log(`target discovery unavailable: ${e.message || e}`);
+    discoverSession = null;
+  }
+
+  log(
+    `mode=event+health drain=${args.drainMs}ms health=${args.healthMs}ms discover=${discoverSession ? "on" : "off"} (Ctrl+C to stop)`
+  );
+
+  const drainTimer = setInterval(() => {
+    drainPass().catch((e) => log(`drain timer: ${e.message || e}`));
+  }, Math.max(500, args.drainMs));
+
+  const healthTimer = setInterval(() => {
+    healthPass().catch((e) => log(`health timer: ${e.message || e}`));
+  }, Math.max(5000, args.healthMs));
 
   const shutdown = () => {
-    clearInterval(timer);
+    clearInterval(drainTimer);
+    clearInterval(healthTimer);
+    if (hintTimer) clearTimeout(hintTimer);
+    try {
+      discoverSession?.close();
+    } catch {
+      /* ignore */
+    }
     mediaServer.close();
     log("shutdown");
     process.exit(0);

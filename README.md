@@ -1,13 +1,17 @@
 # Cursor Skin
 
+**v0.3** · Open-source **Theme Runtime** for Cursor
+
 让 Cursor 活起来。
 
-一个轻量级的 **Cursor 动态皮肤引擎**：在 IDE 里叠上动态壁纸、透明与毛玻璃 UI、主题包——**不修改** Cursor 安装文件，也不另起一套壁纸进程。
+一个轻量级的 **Cursor 动态皮肤引擎 / Theme Runtime**：在 IDE 里叠上动态壁纸、透明与毛玻璃 UI、主题包——**不修改** Cursor 安装文件，也不另起一套壁纸进程。
 
 ![Cursor Skin demo](docs/media/demo.gif)
 
 > 非官方项目，与 Anysphere / Cursor 无关。  
-> **目前处于测试阶段（early / WIP）**：选择器与面板可能随 Cursor 更新失效，请先用测试窗试用。
+> **v0.3（early / WIP）**：Theme Schema v2 + 官方主题包；选择器仍可能随 Cursor 更新失效，请先用测试窗试用。
+
+文档：[使用](docs/USAGE.md) · [Theme Schema](docs/THEME_SCHEMA.md) · [Runtime API](docs/RUNTIME_API.md) · [路线图](docs/ROADMAP.md) · [媒体](docs/MEDIA.md) · [安全](docs/SECURITY.md)
 
 ---
 
@@ -17,7 +21,21 @@ Cursor Skin 是面向 **Cursor IDE** 的轻量视觉定制层。
 
 它把动态壁纸、半透明 UI、毛玻璃和主题系统直接做进 Cursor 窗口里——利用 Cursor 自带的 Chromium 渲染（含 GPU / 视频解码），而不是再挂一个全屏壁纸程序。
 
-不是「再贴一张背景图」那么简单，而是一套可切换、可还原的 **皮肤运行时**。
+不是「再贴一张背景图」那么简单，而是一套可切换、可还原的 **皮肤运行时（Theme Runtime）**。  
+v0.2 起提供稳定门面 `window.CursorSkin`（见 [docs/RUNTIME_API.md](docs/RUNTIME_API.md)）。  
+v0.3 起主题包遵循 [Theme Schema v2](docs/THEME_SCHEMA.md)（工作空间状态：environment / sidebar / chat / editor）。
+
+### 官方主题包
+
+| id | 氛围 |
+|----|------|
+| `default-atmosphere` | 默认氛围 |
+| `moss-night` | 苔绿夜 |
+| `cyber-night` | 冷青赛博 |
+| `forest-mist` | 森雾 |
+| `ink-minimal` | 石墨极简 |
+
+面板 **Skin packs** 一键切换；自建包见 Schema 文档。
 
 ---
 
@@ -136,7 +154,7 @@ powershell -NoProfile -File scripts\start-dream-skin.ps1 -RestartExisting
 powershell -NoProfile -File scripts\restore-dream-skin.ps1
 ```
 
-更多：[docs/USAGE.md](docs/USAGE.md) · [docs/MEDIA.md](docs/MEDIA.md) · [docs/SECURITY.md](docs/SECURITY.md)
+更多：[docs/USAGE.md](docs/USAGE.md) · [docs/RUNTIME_API.md](docs/RUNTIME_API.md) · [docs/MEDIA.md](docs/MEDIA.md) · [docs/SECURITY.md](docs/SECURITY.md)
 
 ---
 
@@ -166,37 +184,35 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 
 ## 路线规划
 
-### 当前
+完整阶段见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
-- CDP 运行时注入  
-- 静图 / GIF / 视频壁纸  
-- 毛玻璃与统一透明度  
-- 本地主题包  
-- 部分 Wallpaper Engine 资源导入  
+### v0.3（当前）
 
-### 下一步
+- Theme Schema **v2**（工作空间描述）+ 官方 5 主题  
+- Schema normalize（兼容 v1 包）  
+- CDP 运行时注入 + **事件驱动轻量守护**（`event+health`）  
+- 公开 **`window.CursorSkin`** Runtime API  
+- Cursor **selector adapter**（`adapters/cursor/`）  
+- 静图 / GIF / 视频壁纸、毛玻璃、部分 WE 导入  
 
-- 动态壁纸稳定性与性能（停播、加载）  
-- 启动体验（白闪、体感变慢）  
-- Changes / Diff 等区域透出壁纸  
-- 主题分享 / 在线主题库  
+### 下一步（v0.4+）
 
-### 未来
-
-- Web Wallpaper 支持  
-- 更完整的 WE 资源兼容（仍保持轻量，不复刻整引擎）  
-- 视情况扩展到其它 Electron IDE  
+- Theme Creator（本地预览 + 导出 zip）  
+- 动态壁纸稳定性（停播、加载）与启动体验  
+- 社区主题仓库；Web Wallpaper；其它 Electron IDE（远期）  
 
 ---
 
 ## 仓库结构
 
 ```text
-assets/     CSS、注入脚本、默认素材、配色
+assets/      CSS、注入脚本、默认素材、配色
+adapters/   Cursor 版本选择器兼容层
 themes/     可分享主题包（theme.json + 壁纸）
 scripts/    启动 / 还原 / injector / 快捷方式
-docs/       使用、媒体、安全、选择器
+docs/       使用、Runtime API、路线图、媒体、安全
 tools/      可选 RePKG（解 WE scene.pkg）
+package.json  version 0.3.0
 ```
 
 状态目录：`%LOCALAPPDATA%\CursorDreamSkin\`
