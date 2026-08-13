@@ -9,7 +9,7 @@
     "verify": "node scripts/injector.mjs --verify",
     "probe": "node scripts/probe-dom.mjs",
     "theme:validate": "node scripts/theme-validate.mjs",
-    "creator": "node scripts/creator-server.mjs --open"
+    "test:theme": "node --test theme/validator/validate.test.mjs"
   },
   "engines": {
     "node": ">=18"

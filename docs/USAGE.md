@@ -89,7 +89,7 @@ CursorSkin.listThemes()
 - **Frost**：只改全局模糊，不再一刀切改三列透明度
 - **拖动**：拖芯片或面板标题；不要拖到系统标题栏中间（已避开窗口吸附区）
 - **小窗**：缩窗口时会自动夹回可视区
-- **Skin packs**：列出 `themes/` 下包，一键应用壁纸 / frost / palette
+- **Skin packs**：列出 `themes/` 下包。仓库自带包是 Schema 样例，**观感有问题，请自行测试，日常请用自己的壁纸**
 - **Color styles**：单独改配色，不删主题包
 - **Wallpaper**：自定义图后当前 pack 记为覆盖；Reset 回到 active pack 默认壁纸（若有）
 
@@ -153,11 +153,11 @@ themes/
 规则：
 
 - Theme **不写** Cursor DOM 选择器（那是 Adapter）
-- `surface.blur` 由 Runtime 经 Adapter `mappings` 写成 `--cds-frost-*`
+- `surface.opacity` / `surface.blur` 由 Runtime 写成 `--cds-{region}-opacity` / `--cds-{region}-blur`（CSS 用 `color-mix` + `blur()`）；Adapter `mappings` 的 fill / `--cds-frost-*` 仍会同步写入
 - 加载经 `scripts/theme-schema.mjs` normalize 后再 apply
 - 旧扁平 schema 仍可加载；新包请只用 Contract
-- 官方包：`default-atmosphere`、`moss-night`、`cyber-night`、`forest-mist`、`ink-minimal`
-- 本地做包：`npm run creator`（见 [CREATOR.md](CREATOR.md)）
+- 官方包：`default-atmosphere`、`moss-night`、`cyber-night`、`forest-mist`、`ink-minimal` — **仅 Schema 样例，观感有问题，不建议当成品**；请用自己的壁纸在测试窗验证
+- 本地做包：按 [THEME_SCHEMA.md](THEME_SCHEMA.md) 写 `theme.json`，再用 `npm run theme:validate`
 
 ## 脚本分工（开源维护）
 
@@ -165,7 +165,6 @@ themes/
 
 - `scripts/install-launchers.ps1` — 装/卸桌面快捷方式  
 - `scripts/start-dream-skin.ps1` — 启动 Cursor + injector  
-- `npm run creator` — Theme Creator（本机 `http://127.0.0.1:3847/`）  
 - `scripts/restore-dream-skin.ps1` — 还原  
 - `scripts/verify-dream-skin.ps1` — 探测是否注入成功  
 
@@ -175,7 +174,6 @@ themes/
 - `theme/schema/` — `theme.schema.json` + defaults  
 - `theme/validator/validate.mjs` — Theme 质量门槛（结构 / 类型 / 范围 / 资源）  
 - `scripts/theme-validate.mjs` — CLI：`npm run theme:validate -- themes/<id>`  
-- `scripts/creator-server.mjs` — Theme Creator：`npm run creator`  
 - `scripts/injector.mjs` — CDP 注入；event+health 守护  
 - `scripts/load-adapter.mjs` — 加载 `adapters/cursor/*.json`  
 - `scripts/media-server.mjs` — 本机 loopback 媒体  
@@ -188,7 +186,7 @@ themes/
 
 - `assets/dream-skin.css` / `renderer-inject.js` / `palettes.json` / `theme.json`
 - `themes/<id>/` — Theme Contract 包（见 [THEME_SCHEMA.md](THEME_SCHEMA.md)）
-- [CREATOR.md](CREATOR.md) / [ADAPTER.md](ADAPTER.md) / [RUNTIME_API.md](RUNTIME_API.md) / [ROADMAP.md](ROADMAP.md) / [THEME_SCHEMA.md](THEME_SCHEMA.md)
+- [ADAPTER.md](ADAPTER.md) / [RUNTIME_API.md](RUNTIME_API.md) / [ROADMAP.md](ROADMAP.md) / [THEME_SCHEMA.md](THEME_SCHEMA.md)
 
 ## 常见问题
 

@@ -153,7 +153,7 @@ export function veilFromContractWorkspace(workspace, appearanceFrost) {
   };
 }
 
-/** Canonical surfaces map for Runtime / Creator. */
+/** Canonical surfaces map for Runtime. */
 export function surfacesFromWorkspace(workspace) {
   const ws = workspace && typeof workspace === "object" ? workspace : {};
   const out = {};

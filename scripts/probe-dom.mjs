@@ -153,6 +153,7 @@ async function main() {
         (0, eval)(src);
         return window.__cursorDreamSkin.probe();
       })()`);
+      console.log("regionHealth:", JSON.stringify(probe.regionHealth || probe.regions || {}, null, 2));
       console.log("probe:", JSON.stringify(probe, null, 2));
     } finally {
       session.close();

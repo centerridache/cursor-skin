@@ -9,9 +9,10 @@
 ![Cursor Skin demo](docs/media/demo.gif)
 
 > 非官方项目，与 Anysphere / Cursor 无关。  
-> **v0.3（early / WIP）**：Theme Schema v2 + 官方主题包；选择器仍可能随 Cursor 更新失效，请先用测试窗试用。
+> **v0.3（early / WIP）**：Theme Contract + Validator + Runtime。选择器仍可能随 Cursor 更新失效。  
+> **请用自己的壁纸在测试窗里试**，不要依赖仓库自带的示例主题（见下方说明）。
 
-文档：[使用](docs/USAGE.md) · [Theme Schema](docs/THEME_SCHEMA.md) · [Theme Creator](docs/CREATOR.md) · [Runtime API](docs/RUNTIME_API.md) · [路线图](docs/ROADMAP.md) · [媒体](docs/MEDIA.md) · [安全](docs/SECURITY.md)
+文档：[使用](docs/USAGE.md) · [Theme Schema](docs/THEME_SCHEMA.md) · [Runtime API](docs/RUNTIME_API.md) · [路线图](docs/ROADMAP.md) · [媒体](docs/MEDIA.md) · [安全](docs/SECURITY.md)
 
 ---
 
@@ -25,17 +26,23 @@ Cursor Skin 是面向 **Cursor IDE** 的轻量视觉定制层。
 v0.2 起提供稳定门面 `window.CursorSkin`（见 [docs/RUNTIME_API.md](docs/RUNTIME_API.md)）。  
 v0.3 起主题包遵循 [Theme Contract](docs/THEME_SCHEMA.md)（`identity` / `appearance` / `workspace` / `performance`）。
 
-### 官方主题包
+### 示例主题包（有问题，不建议当成品用）
 
-| id | 氛围 |
-|----|------|
+`themes/` 里的包只是 Theme Contract 的样例，**部分区域/透明度/雾感在当前 Cursor 上会错、会脏、会对不齐**。
+
+- **不建议**日常使用自带主题  
+- **建议**自己准备静图或视频壁纸，在独立测试窗里调 Sidebar / Editor / Right，确认能接受再开主会话  
+- 自建包用 [Theme Schema](docs/THEME_SCHEMA.md) + `npm run theme:validate`
+
+| id | 仅作样例 |
+|----|----------|
 | `default-atmosphere` | 默认氛围 |
 | `moss-night` | 苔绿夜 |
 | `cyber-night` | 冷青赛博 |
 | `forest-mist` | 森雾 |
 | `ink-minimal` | 石墨极简 |
 
-面板 **Skin packs** 一键切换；自建包见 Schema 文档。
+面板 **Skin packs** 仍能一键加载这些样例，方便对照 Schema；观感请自行测试。
 
 ---
 
@@ -189,11 +196,31 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 
 - **Theme Contract** 定型（identity / appearance / workspace / performance）  
 - `theme/schema/` + normalize（兼容旧扁平包）  
-- **Theme Validator**：`npm run theme:validate`  
-- **Theme Creator**：`npm run creator`（本地预览 + 导出 `theme.zip`）  
-- 官方 5 主题  
+- **Theme Validator**：`npm run theme:validate` / `npm run test:theme`  
+- 示例 5 主题（仅样例，见上方警告）  
 - CDP event+health 守护、`window.CursorSkin`  
-- Adapter `regions` / `holes` / `mappings` → `data-cursor-skin` + `surface.blur`；CSS 只写属性 
+- Adapter `regions` / `holes` / `mappings` → `data-cursor-skin`；CSS 只写属性  
+- Runtime：按需 Tool Pane heal、Region untagged probe（不再 1.2s 全量扫 DOM）  
+- Theme Creator 本地 GUI **暂缓**（手写 `theme.json` 即可）
+
+### 近期 Runtime / Contract（摘要）
+
+- Workspace 五区域 `surface.opacity` / `surface.blur` 写入 CSS 变量；editor/auxiliary/terminal 不再用会把 BrowserView 涂黑的 `backdrop-filter`  
+- Adapter 作为静态 Region/Hole 的唯一来源；health 只记录 Region miss，不自动 re-apply  
+- Validator 补齐 tagline / art.safeArea 等字段；未知字段与未知 workspace region 为 **error**；禁止键递归进 array  
+- 去掉 Theme Creator（`npm run creator`）
+
+### 性能（约 5 秒实机采样）
+
+测试环境：16 逻辑线程笔记本 + NVIDIA 核显/独显；Cursor 主会话在跑。壁纸为 **4K H.264 视频**。数字含 Cursor 自身 UI，不是纯注入脚本。
+
+| 场景 | Cursor CPU | 占整机大约 | GPU | 视频解码（NVDEC） |
+|------|------------|------------|-----|-------------------|
+| 不注入皮肤 | ~1.0 核 | ~6.5% | ~34% | 0% |
+| 皮肤 + 4K 壁纸播放 | ~1.3 核 | ~8% | ~38% | **~60%** |
+| 皮肤仍在、壁纸暂停（切后台 / 最小化同类路径） | ~1.0 核 | ~6% | ~37% | **0%** |
+
+结论：4K 动态壁纸的开销主要在 **GPU 解码**，不在 Theme 轮询。窗口隐藏时 Runtime 会停视频。更省电请用 **1080p** 或静图（见 [MEDIA.md](docs/MEDIA.md)）。Injector 守护在 5 秒采样里 CPU 可忽略。
 
 ### 下一步
 
@@ -207,9 +234,8 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 assets/      CSS、注入脚本、默认素材、配色
 adapters/   Cursor Adapter（regions + holes + mappings）
 theme/      Theme Contract（schema + validator + defaults）
-creator/    Theme Creator（本地 Web App）
 themes/     官方 / 本地主题包
-scripts/    启动 / 还原 / injector / theme-schema / theme-validate / creator-server
+scripts/    启动 / 还原 / injector / theme-schema / theme-validate
 docs/       使用、Theme Contract、Runtime API、路线图
 tools/      可选 RePKG（解 WE scene.pkg）
 package.json  version 0.3.0

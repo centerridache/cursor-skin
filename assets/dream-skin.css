@@ -21,11 +21,31 @@ html[data-cursor-dream-skin="1"] {
   --cds-editor-panel: rgba(12, 14, 22, 0.22);
   --cds-editor-canvas: rgba(12, 14, 22, 0.5);
   --cds-terminal-panel: transparent;
-  --cds-frost-sidebar: var(--cds-frost);
+  --cds-frost-sidebar: none;
   --cds-frost-editor: none;
   --cds-frost-chat: none;
   --cds-frost-auxiliary: none;
   --cds-frost-terminal: none;
+  --cds-sidebar-fill: rgb(12, 16, 28);
+  --cds-sidebar-opacity: 0.45;
+  --cds-sidebar-blur: 12px;
+  --cds-sidebar-filter: none;
+  --cds-editor-fill: rgb(12, 14, 22);
+  --cds-editor-opacity: 0.72;
+  --cds-editor-blur: 4px;
+  --cds-editor-filter: none;
+  --cds-chat-fill: rgb(12, 14, 22);
+  --cds-chat-opacity: 0.55;
+  --cds-chat-blur: 10px;
+  --cds-chat-filter: none;
+  --cds-auxiliary-fill: rgb(12, 14, 22);
+  --cds-auxiliary-opacity: 0.45;
+  --cds-auxiliary-blur: 12px;
+  --cds-auxiliary-filter: none;
+  --cds-terminal-fill: rgb(12, 14, 22);
+  --cds-terminal-opacity: 0.6;
+  --cds-terminal-blur: 8px;
+  --cds-terminal-filter: none;
   --cds-tool-surface: rgba(10, 12, 18, 0.28);
   --cds-accent: #6ea8ff;
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
@@ -95,6 +115,9 @@ html[data-cursor-dream-skin="1"] body {
   background-repeat: no-repeat;
   background-size: cover;
   background-position: var(--cds-focus-x) var(--cds-focus-y);
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 #cursor-dream-skin-root .cds-still {
@@ -107,6 +130,7 @@ html[data-cursor-dream-skin="1"] body {
   display: none;
   pointer-events: none;
   border: 0;
+  filter: none !important;
 }
 
 html[data-cds-still="1"] #cursor-dream-skin-root .cds-still {
@@ -127,6 +151,7 @@ html[data-cds-still="1"] #cursor-dream-skin-root .cds-wallpaper {
   display: none;
   pointer-events: none;
   background: transparent;
+  filter: none !important;
 }
 
 html[data-cds-video="1"] #cursor-dream-skin-root .cds-video {
@@ -186,45 +211,65 @@ html[data-cursor-dream-skin="1"] .workspace-container {
   max-height: 100% !important;
 }
 
-/* Semantic Workspace surfaces — Adapter stamps [data-cursor-skin], CSS never needs Cursor class names here. */
+/* Semantic Workspace surfaces — Adapter stamps [data-cursor-skin], CSS never needs Cursor class names here.
+ * Plate alpha comes from Runtime rgba fills (--cds-sidebar etc.).
+ * Region frost is --cds-{region}-filter, and is "none" when opacity ≈ 0 so a
+ * 0% slider does not blur the wallpaper.
+ * Editor / auxiliary / terminal never use backdrop-filter: it creates a
+ * stacking context that blacks out Cursor's native Browser WebContentsView. */
 html[data-cursor-dream-skin="1"] [data-cursor-skin="sidebar"] {
   background-color: var(--cds-sidebar) !important;
   background-image: none !important;
-  backdrop-filter: var(--cds-frost-sidebar, var(--cds-frost)) !important;
-  -webkit-backdrop-filter: var(--cds-frost-sidebar, var(--cds-frost)) !important;
+  backdrop-filter: var(--cds-sidebar-filter, none) !important;
+  -webkit-backdrop-filter: var(--cds-sidebar-filter, none) !important;
   border-right: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
+}
+
+/* Sidebar 0%: punch Cursor glass descendants so the column is actually clear. */
+html[data-cursor-dream-skin="1"][data-cds-clear-sidebar="1"] {
+  --vscode-sideBar-background: transparent !important;
+  --vscode-sideBarSectionHeader-background: transparent !important;
+  --vscode-activityBar-background: transparent !important;
+}
+
+html[data-cursor-dream-skin="1"][data-cds-clear-sidebar="1"] [data-cursor-skin="sidebar"],
+html[data-cursor-dream-skin="1"][data-cds-clear-sidebar="1"] [data-cursor-skin="sidebar"] * {
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html[data-cursor-dream-skin="1"][data-cds-clear-sidebar="1"] [data-cursor-skin="sidebar"] {
+  border-right-color: transparent !important;
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="chat"] {
   background: var(--cds-chat-panel) !important;
   background-color: var(--cds-chat-panel) !important;
-  backdrop-filter: var(--cds-frost-chat, none) !important;
-  -webkit-backdrop-filter: var(--cds-frost-chat, none) !important;
+  backdrop-filter: var(--cds-chat-filter, none) !important;
+  -webkit-backdrop-filter: var(--cds-chat-filter, none) !important;
   box-shadow: none !important;
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="auxiliary"] {
   background-color: var(--cds-editor-panel) !important;
   background-image: none !important;
-  backdrop-filter: var(--cds-frost-auxiliary, none) !important;
-  -webkit-backdrop-filter: var(--cds-frost-auxiliary, none) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   border-left: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="editor"] {
   background-color: var(--cds-editor-canvas) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="terminal"] {
   background-color: var(--cds-terminal-panel, transparent) !important;
-  backdrop-filter: var(--cds-frost-terminal, none) !important;
-  -webkit-backdrop-filter: var(--cds-frost-terminal, none) !important;
-}
-
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-cursor-skin="auxiliary"] {
-  background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -304,6 +349,21 @@ html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-default
 
 html[data-cursor-dream-skin="1"][data-cds-palette="1"] [data-cursor-skin="auxiliary"] {
   background-color: var(--cds-editor-panel) !important;
+}
+
+/* Native Terminal / Browser live in auxiliary. A painted host or backdrop-filter
+   covers the WebContentsView and shows as a black pane. Must win over palette. */
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-cursor-skin="auxiliary"],
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [data-cursor-skin="auxiliary"],
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [data-cursor-skin="editor"] {
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] {
+  --vscode-panel-background: transparent !important;
+  --vscode-editorPane-background: transparent !important;
 }
 
 /* Title strip + try to tint native Windows caption overlay via VS Code vars */

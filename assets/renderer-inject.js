@@ -7,15 +7,16 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 53;
+  const VERSION = 62;
   const RUNTIME_VERSION = "0.3.0";
-  const PANEL_V = "16";
+  const PANEL_V = "18";
   const REGION_ATTR = "data-cursor-skin";
   const HOLE_ATTR = "data-cursor-skin-hole";
   const REGION_KEYS = ["sidebar", "editor", "chat", "auxiliary", "terminal"];
   const CHROME_KEYS = ["titlebar", "statusbar", "panel", "diff"];
 
-  const DEFAULT_SELECTORS = {
+  /* Probe fallback only. After Adapter loads, cfg.selectors replaces this wholesale. */
+  const FALLBACK_SELECTORS = {
     workbench: ".monaco-workbench",
     sidebar: ".part.sidebar, nav.ui-sidebar, .ui-sidebar",
     auxiliarybar: ".part.auxiliarybar",
@@ -31,73 +32,28 @@
     glassRoot: '[class*="glass-"]',
   };
 
-  const DEFAULT_REGIONS = {
+  /* Thin stamp fallback if apply() has no Adapter regions. Not merged with Adapter. */
+  const FALLBACK_REGIONS = {
     sidebar: [
       "[data-cds-sidebar-dock='1']",
       "div:has(> nav.ui-sidebar)",
       "div:has(> .ui-sidebar)",
-      ".glass-sidebar-docked",
-      "[class*='glass-sidebar-docked']",
       ".monaco-workbench .part.sidebar",
-      ".monaco-workbench .part.activitybar",
     ],
     editor: [
       ".monaco-workbench .part.editor",
       ".monaco-workbench .part.editorgroupcontainer",
-      ".monaco-workbench .editor-group-container",
     ],
-    chat: [".agent-panel", ".aichat-pane", ".composer-bar", "[class*='composer-bar']"],
-    auxiliary: [
-      ".monaco-workbench .part.auxiliarybar",
-      ".editor-panel-container",
-      "[class*='editor-panel-container']",
-    ],
+    chat: [".agent-panel", ".aichat-pane", ".composer-bar"],
+    auxiliary: [".monaco-workbench .part.auxiliarybar", ".editor-panel-container"],
     terminal: ["[data-component='terminal-tab-content']"],
-    titlebar: [
-      ".part.titlebar",
-      "[data-cds-titlebar='1']",
-      ".glass-17fyfba",
-    ],
+    titlebar: [".part.titlebar", "[data-cds-titlebar='1']"],
     statusbar: [".part.statusbar"],
     panel: [".monaco-workbench .part.panel"],
-    diff: [
-      ".diff-tab-content",
-      "[data-component='diff-tab-content']",
-      "[data-component='diff-tab-view-body']",
-      "[id*='tabpanel-editor-panel-group-stable-diff']",
-    ],
+    diff: [".diff-tab-content", "[data-component='diff-tab-content']"],
   };
 
-  const DEFAULT_HOLES = [
-    "nav.ui-sidebar",
-    ".ui-sidebar",
-    ".glass-sidebar-header-actions-stack",
-    "[class*='glass-sidebar-header']",
-    ".xterm",
-    ".xterm-viewport",
-    ".xterm-screen",
-    ".xterm-wrapper",
-    ".terminal-wrapper",
-    ".glass-terminal-container",
-    "[data-component='browser-tab-content']",
-    "[id*='tabpanel-editor-panel-group-terminal']",
-    "[id*='tabpanel-editor-panel-group-browser']",
-    ".agent-panel-empty-state-prompt",
-    ".agent-panel-empty-state-footer-region",
-    ".agent-panel-empty-state-footer-actions",
-    "[class*='agent-panel-empty-state']",
-    ".editor-panel-container > hr",
-    "[class*='editor-panel-container'] > hr",
-    "[data-component='diff-tab-content'] .ui-card",
-    "[data-component='diff-tab-content'] .ui-card__header",
-    "[data-component='diff-tab-content'] .ui-default-diff",
-    "[data-cursor-skin='diff'] .ui-card",
-    "[data-cursor-skin='diff'] .ui-card__header",
-    "[data-cursor-skin='diff'] .ui-default-diff",
-    "[data-cursor-skin='diff'] .monaco-editor",
-    "[data-cursor-skin='diff'] .monaco-editor-background",
-    "[data-cursor-skin='diff'] .monaco-diff-editor",
-  ];
+  const FALLBACK_HOLES = [];
 
   const DEFAULT_MAPPINGS = {
     sidebar: { fill: "--cds-sidebar", veil: "--cds-veil-sidebar", blur: "--cds-frost-sidebar" },
@@ -107,10 +63,10 @@
     terminal: { fill: "--cds-terminal-panel", blur: "--cds-frost-terminal" },
   };
 
-  let selectorMap = Object.assign({}, DEFAULT_SELECTORS);
-  let regionMap = Object.assign({}, DEFAULT_REGIONS);
+  let selectorMap = FALLBACK_SELECTORS;
+  let regionMap = FALLBACK_REGIONS;
   let regionAttr = REGION_ATTR;
-  let holeList = DEFAULT_HOLES.slice();
+  let holeList = FALLBACK_HOLES.slice();
   let holeAttr = HOLE_ATTR;
   let cssMappings = Object.assign({}, DEFAULT_MAPPINGS);
 
@@ -895,8 +851,7 @@
   }
 
   function panelRgba(opacity, dark, tokenHex) {
-    const t = clamp01(opacity, 0.5);
-    const a = 0.06 + t * 0.7;
+    const a = clamp01(opacity, 0.5);
     if (tokenHex) {
       const mixed = hexToRgba(tokenHex, a);
       if (mixed) return mixed;
@@ -904,6 +859,18 @@
     return dark
       ? "rgba(8, 10, 18, " + a + ")"
       : "rgba(255, 255, 255, " + a + ")";
+  }
+
+  function fillRgb(dark, tokenHex) {
+    if (tokenHex && typeof tokenHex === "string") {
+      let h = tokenHex.trim().replace("#", "");
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      if (/^[0-9a-fA-F]{6}$/.test(h)) {
+        const n = parseInt(h, 16);
+        return "rgb(" + ((n >> 16) & 255) + ", " + ((n >> 8) & 255) + ", " + (n & 255) + ")";
+      }
+    }
+    return dark ? "rgb(8, 10, 18)" : "rgb(255, 255, 255)";
   }
 
   function surfaceOpacity(node, fallback) {
@@ -967,6 +934,9 @@
     if (!cfg) return false;
     if (cfg.forceWorkspace === true) return true;
     if (!cfg.surfaces && !cfg.veil) return false;
+    if (typeof cfg.themePackId === "string" && cfg.themePackId && cfg.themePackId !== workspaceSourcePackId) {
+      return true;
+    }
     try {
       return !localStorage.getItem("cds-workspace-opacity");
     } catch (_) {
@@ -1011,9 +981,17 @@
       const map = mappingFor(key);
       const op = clamp01(workspaceOpacity[key], defaultWorkspaceOpacity()[key]);
       const blur = clampBlur(workspaceBlur[key], defaultWorkspaceBlur()[key]);
-      if (map.fill) html.style.setProperty(map.fill, panelRgba(op, dark, fillTokenFor(key)));
+      const token = fillTokenFor(key);
+      html.style.setProperty("--cds-" + key + "-opacity", String(op));
+      html.style.setProperty("--cds-" + key + "-blur", Math.round(blur) + "px");
+      html.style.setProperty("--cds-" + key + "-fill", fillRgb(dark, token));
+      const filter = op < 0.02 ? "none" : frostCss(blur);
+      html.style.setProperty("--cds-" + key + "-filter", filter);
+      if (map.fill) html.style.setProperty(map.fill, panelRgba(op, dark, token));
       if (map.veil) html.style.setProperty(map.veil, String(op));
-      if (map.blur) html.style.setProperty(map.blur, frostCss(blur));
+      if (map.blur) html.style.setProperty(map.blur, filter);
+      if (op < 0.02) html.setAttribute("data-cds-clear-" + key, "1");
+      else html.removeAttribute("data-cds-clear-" + key);
     }
     applyVeil({
       sidebar: workspaceOpacity.sidebar,
@@ -1034,6 +1012,9 @@
     }
     if (opts && opts.linkChatToEditor && typeof p.editor === "number") {
       workspaceOpacity.chat = workspaceOpacity.editor;
+    }
+    if (opts && opts.linkTerminalToAuxiliary && typeof p.auxiliary === "number") {
+      workspaceOpacity.terminal = workspaceOpacity.auxiliary;
     }
     writeWorkspaceOpacity();
     applyWorkspaceSurfaces();
@@ -1115,14 +1096,14 @@
       for (let n = 0; n < nodes.length; n++) {
         const el = nodes[n];
         if (skipSkinHost(el)) continue;
-        el.setAttribute(attr, value);
+        if (el.getAttribute(attr) !== value) el.setAttribute(attr, value);
       }
     }
   }
 
   function tagAdapterRegions() {
     const attr = regionAttr || REGION_ATTR;
-    const regions = regionMap && typeof regionMap === "object" ? regionMap : DEFAULT_REGIONS;
+    const regions = regionMap && typeof regionMap === "object" ? regionMap : FALLBACK_REGIONS;
     const keys = REGION_KEYS.concat(CHROME_KEYS);
     for (let r = 0; r < keys.length; r++) {
       const key = keys[r];
@@ -1133,7 +1114,67 @@
 
   function tagAdapterHoles() {
     const attr = holeAttr || HOLE_ATTR;
-    stampSelectorList(holeList && holeList.length ? holeList : DEFAULT_HOLES, attr, "1");
+    stampSelectorList(Array.isArray(holeList) ? holeList : FALLBACK_HOLES, attr, "1");
+  }
+
+  function selectorHitsUntagged(sel, attr, value) {
+    let el;
+    try {
+      el = document.querySelector(sel);
+    } catch (_) {
+      return false;
+    }
+    if (!el || skipSkinHost(el)) return false;
+    return el.getAttribute(attr) !== value;
+  }
+
+  function hasUntaggedRegionTarget() {
+    const attr = regionAttr || REGION_ATTR;
+    const regions = regionMap && typeof regionMap === "object" ? regionMap : FALLBACK_REGIONS;
+    const keys = REGION_KEYS.concat(CHROME_KEYS);
+    for (let r = 0; r < keys.length; r++) {
+      const key = keys[r];
+      const sels = splitSelectorList(regions[key] || []);
+      for (let i = 0; i < sels.length; i++) {
+        if (selectorHitsUntagged(sels[i], attr, key)) return true;
+      }
+    }
+    return false;
+  }
+
+  function hasUntaggedHoleTarget() {
+    const attr = holeAttr || HOLE_ATTR;
+    const sels = splitSelectorList(Array.isArray(holeList) ? holeList : FALLBACK_HOLES);
+    for (let i = 0; i < sels.length; i++) {
+      if (selectorHitsUntagged(sels[i], attr, "1")) return true;
+    }
+    return false;
+  }
+
+  function hasUntaggedTarget() {
+    return hasUntaggedRegionTarget() || hasUntaggedHoleTarget();
+  }
+
+  function isOwnSkinHostNode(node) {
+    if (!node || node.nodeType !== 1) return true;
+    const id = node.id;
+    return id === ROOT_ID || id === HUD_ID || id === STYLE_ID;
+  }
+
+  function mutationsOnlyOwnSkinHosts(mutations) {
+    if (!mutations || !mutations.length) return true;
+    for (let i = 0; i < mutations.length; i++) {
+      const m = mutations[i];
+      const added = m.addedNodes;
+      const removed = m.removedNodes;
+      for (let n = 0; n < added.length; n++) {
+        if (!isOwnSkinHostNode(added[n])) return false;
+      }
+      for (let n = 0; n < removed.length; n++) {
+        if (!isOwnSkinHostNode(removed[n])) return false;
+      }
+    }
+    return true;
   }
 
   function applyFrostLevel(level) {
@@ -1157,9 +1198,9 @@
       dark ? "rgba(12, 14, 22, " + a.float + ")" : "rgba(18, 22, 34, " + a.float + ")"
     );
     tagSidebarDock();
-    const label = document.querySelector("#cursor-dream-skin-hud .cds-frost-value");
+    const label = document.querySelector("#cursor-dream-skin-hud [data-cds-frost-value]");
     if (label) label.textContent = frostLevel + "%";
-    const slider = document.querySelector("#cursor-dream-skin-hud .cds-frost-range:not([data-ws-region])");
+    const slider = document.querySelector("#cursor-dream-skin-hud [data-cds-frost-range]");
     if (slider && Number(slider.value) !== frostLevel) slider.value = String(frostLevel);
   }
 
@@ -1182,17 +1223,40 @@
     html.setAttribute("data-cds-palette", "1");
   }
 
+  function isVisiblyOpen(el) {
+    if (!el) return false;
+    try {
+      const r = el.getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) return false;
+      const s = getComputedStyle(el);
+      if (s.display === "none" || s.visibility === "hidden") return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function syncToolPaneMark() {
     try {
       const html = document.documentElement;
+      let mode = "";
       const active = document.querySelector(
         ".editor-panel-container [role='tab'][aria-selected='true'], [class*='editor-panel-container'] [role='tab'][aria-selected='true']"
       );
       const text = ((active && active.textContent) || "").toLowerCase().replace(/\s+/g, " ");
-      let mode = "";
       if (/browser/.test(text)) mode = "browser";
       else if (/powershell|terminal|cmd|pwsh/.test(text)) mode = "terminal";
       else if (/changes|diff/.test(text)) mode = "diff";
+      if (!mode) {
+        const browserPanel = document.querySelector("[id*='tabpanel-editor-panel-group-browser']");
+        if (browserPanel && browserPanel.getAttribute("aria-hidden") !== "true" && isVisiblyOpen(browserPanel)) {
+          mode = "browser";
+        }
+      }
+      if (!mode) {
+        if (isVisiblyOpen(document.querySelector('[data-component="browser-tab-content"]'))) mode = "browser";
+        else if (isVisiblyOpen(document.querySelector('[data-component="terminal-tab-content"]'))) mode = "terminal";
+      }
       if (mode) html.setAttribute("data-cds-tool-pane", mode);
       else html.removeAttribute("data-cds-tool-pane");
     } catch (_) {
@@ -1265,24 +1329,23 @@
     }
   }
 
+  const TOOL_PANE_HOST_SEL =
+    '[data-component="terminal-tab-content"], [data-component="browser-tab-content"]';
+
   function healToolPaneDamage() {
     try {
-      document
-        .querySelectorAll(
-          '[data-component="terminal-tab-content"], [data-component="browser-tab-content"]'
-        )
-        .forEach(function (host) {
-          if (!host || !host.style) return;
-          // Old injectors forced overflow/flex/absolute webview sizing and
-          // blew terminal hosts to 50kpx tall — strip those leftovers only.
-          host.style.removeProperty("overflow");
-          host.style.removeProperty("min-height");
-          host.style.removeProperty("position");
-          host.style.removeProperty("flex");
-          host.style.removeProperty("isolation");
-          host.style.removeProperty("background");
-          host.style.removeProperty("background-color");
-        });
+      document.querySelectorAll(TOOL_PANE_HOST_SEL).forEach(function (host) {
+        if (!host || !host.style) return;
+        // Old injectors forced overflow/flex/absolute webview sizing and
+        // blew terminal hosts to 50kpx tall — strip those leftovers only.
+        host.style.removeProperty("overflow");
+        host.style.removeProperty("min-height");
+        host.style.removeProperty("position");
+        host.style.removeProperty("flex");
+        host.style.removeProperty("isolation");
+        host.style.removeProperty("background");
+        host.style.removeProperty("background-color");
+      });
       document.querySelectorAll("webview").forEach(function (wv) {
         if (!wv) return;
         const st = String(wv.getAttribute("style") || "");
@@ -1308,6 +1371,77 @@
     }
   }
 
+  /** True when leftover inline styles from old sizeToolWebviews loops are present. */
+  function legacyToolPaneDamagePresent() {
+    try {
+      const hosts = document.querySelectorAll(TOOL_PANE_HOST_SEL);
+      for (let i = 0; i < hosts.length; i++) {
+        const s = hosts[i] && hosts[i].style;
+        if (!s) continue;
+        const minH = parseFloat(s.minHeight) || 0;
+        if (minH > 4000) return true;
+        if (s.position === "absolute" || s.position === "fixed") return true;
+        if (s.isolation) return true;
+      }
+      const webviews = document.querySelectorAll("webview");
+      for (let i = 0; i < webviews.length; i++) {
+        const st = String(webviews[i].getAttribute("style") || "");
+        if (/position:\s*absolute/i.test(st) || /important/i.test(st)) return true;
+      }
+      const boxes = document.querySelectorAll(".webview-browser-container");
+      for (let i = 0; i < boxes.length; i++) {
+        const st = String(boxes[i].getAttribute("style") || "");
+        if (/opacity:\s*1\s*!important/i.test(st) || /z-index:\s*20\s*!important/i.test(st)) {
+          return true;
+        }
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return false;
+  }
+
+  function xtermNeedsFrost() {
+    try {
+      const term = findXtermInstance();
+      if (!term || !term.options) return false;
+      if (!term.options.allowTransparency) return true;
+      const prevBg = term.options.theme && term.options.theme.background;
+      return prevBg !== "#00000000";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stopToolPaneShieldBurst() {
+    if (!global.__cdsToolPaneShieldTimer) return;
+    try {
+      clearInterval(global.__cdsToolPaneShieldTimer);
+    } catch (_) {}
+    global.__cdsToolPaneShieldTimer = null;
+  }
+
+  /**
+   * Race leftover sizeToolWebviews intervals we cannot clearInterval.
+   * Only armed when legacy inline damage is actually present; stops once clean or max burst.
+   */
+  function armToolPaneShieldBurst(gen) {
+    if (global.__cdsToolPaneGen !== gen) return;
+    if (global.__cdsToolPaneShieldTimer) return;
+    const started = Date.now();
+    const burstMs = 2000;
+    global.__cdsToolPaneShieldTimer = setInterval(function () {
+      if (global.__cdsToolPaneGen !== gen) {
+        stopToolPaneShieldBurst();
+        return;
+      }
+      healToolPaneDamage();
+      if (!legacyToolPaneDamagePresent() || Date.now() - started >= burstMs) {
+        stopToolPaneShieldBurst();
+      }
+    }, 200);
+  }
+
   function ensureToolPaneWatch() {
     const gen = VERSION;
     global.__cdsToolPaneGen = gen;
@@ -1319,11 +1453,12 @@
       } catch (_) {}
       global.__cdsToolPaneWatchTimer = null;
     }
-    if (global.__cdsToolPaneShieldTimer) {
+    stopToolPaneShieldBurst();
+    if (global.__cdsToolPaneShieldFallback) {
       try {
-        clearInterval(global.__cdsToolPaneShieldTimer);
+        clearInterval(global.__cdsToolPaneShieldFallback);
       } catch (_) {}
-      global.__cdsToolPaneShieldTimer = null;
+      global.__cdsToolPaneShieldFallback = null;
     }
     if (global.__cdsToolPaneClickHandler) {
       try {
@@ -1336,16 +1471,20 @@
       syncToolPaneMark();
       tagSidebarDock();
       healToolPaneDamage();
+      if (legacyToolPaneDamagePresent()) armToolPaneShieldBurst(gen);
     };
     global.__cdsToolPaneClickHandler = kick;
     document.addEventListener("click", kick, true);
-    // Fast shield: older injectors left setIntervals we cannot clearInterval
-    // (no stored ids). Undo their layout mutations until those loops die.
-    global.__cdsToolPaneShieldTimer = setInterval(function () {
-      if (global.__cdsToolPaneGen !== gen) return;
-      healToolPaneDamage();
-    }, 200);
     global.__cdsToolPaneWatchTimer = setInterval(kick, 2500);
+    // Slow safety net only — not the main heal path. Catches a new xterm/webview
+    // that appeared without a click, or leftover damage from an uncleared old loop.
+    global.__cdsToolPaneShieldFallback = setInterval(function () {
+      if (global.__cdsToolPaneGen !== gen) return;
+      if (global.__cdsToolPaneShieldTimer) return;
+      if (!legacyToolPaneDamagePresent() && !xtermNeedsFrost()) return;
+      healToolPaneDamage();
+      if (legacyToolPaneDamagePresent()) armToolPaneShieldBurst(gen);
+    }, 8000);
     kick();
   }
 
@@ -1975,7 +2114,10 @@
         const patch = {};
         patch[key] = n;
         const api = global.__cursorDreamSkin;
-        const opts = { linkChatToEditor: key === "editor" };
+        const opts = {
+          linkChatToEditor: key === "editor",
+          linkTerminalToAuxiliary: key === "auxiliary",
+        };
         if (api && typeof api.setWorkspaceOpacity === "function") {
           api.setWorkspaceOpacity(patch, opts);
         } else {
@@ -2001,6 +2143,7 @@
     frostLabel.textContent = "Blur";
     const frostValue = document.createElement("div");
     frostValue.className = "cds-frost-value";
+    frostValue.setAttribute("data-cds-frost-value", "1");
     frostValue.textContent = frostLevel + "%";
     const frostHead = document.createElement("div");
     frostHead.className = "cds-frost-head";
@@ -2014,7 +2157,8 @@
     frostRange.step = "1";
     frostRange.value = String(frostLevel);
     frostRange.className = "cds-frost-range";
-    frostRange.title = "Global blur · does not change column opacity";
+    frostRange.setAttribute("data-cds-frost-range", "1");
+    frostRange.title = "Floating chrome blur · does not change wallpaper or column opacity";
     frostRange.addEventListener("input", function () {
       const api = global.__cursorDreamSkin;
       const n = Number(frostRange.value) || 0;
@@ -2024,7 +2168,7 @@
     frostRow.appendChild(frostRange);
     const frostHint = document.createElement("div");
     frostHint.className = "cds-hud-note";
-    frostHint.textContent = "Global glass blur only";
+    frostHint.textContent = "Floating chrome only · does not blur wallpaper";
     frostRow.appendChild(frostHint);
     body.appendChild(frostRow);
 
@@ -2115,9 +2259,14 @@
   function ensureHostWatch() {
     if (global.__cdsHostWatch === VERSION) return;
     global.__cdsHostWatch = VERSION;
-    const tick = function () {
-      tagSidebarDock();
-      tagAdapterRegions();
+    if (global.__cdsHostFlushTimer) {
+      try {
+        clearTimeout(global.__cdsHostFlushTimer);
+      } catch (_) {}
+      global.__cdsHostFlushTimer = null;
+    }
+    global.__cdsHostStampPending = false;
+    const recoverIfHostsMissing = function () {
       const ok = rehomeSkinHosts();
       if (ok || global.__cdsReapplying) return;
       const cfg = global.__cdsLastApplyConfig;
@@ -2135,13 +2284,41 @@
       }
       global.__cdsReapplying = false;
     };
+    const stampIfUntagged = function () {
+      if (hasUntaggedTarget()) tagAdapterRegions();
+    };
+    const flushHostWatch = function () {
+      if (global.__cdsHostFlushTimer) {
+        try {
+          clearTimeout(global.__cdsHostFlushTimer);
+        } catch (_) {}
+        global.__cdsHostFlushTimer = null;
+      }
+      const wantStamp = !!global.__cdsHostStampPending;
+      global.__cdsHostStampPending = false;
+      if (wantStamp) stampIfUntagged();
+      recoverIfHostsMissing();
+    };
+    const scheduleHostFlush = function (wantStamp) {
+      if (wantStamp) global.__cdsHostStampPending = true;
+      if (global.__cdsHostFlushTimer) {
+        try {
+          clearTimeout(global.__cdsHostFlushTimer);
+        } catch (_) {}
+      }
+      global.__cdsHostFlushTimer = setTimeout(flushHostWatch, 200);
+    };
     if (global.__cdsHostMo) {
       try {
         global.__cdsHostMo.disconnect();
       } catch (_) {}
     }
-    const mo = new MutationObserver(function () {
-      tick();
+    const mo = new MutationObserver(function (mutations) {
+      if (mutationsOnlyOwnSkinHosts(mutations)) {
+        scheduleHostFlush(false);
+        return;
+      }
+      scheduleHostFlush(true);
     });
     global.__cdsHostMo = mo;
     const start = function () {
@@ -2155,7 +2332,7 @@
       } catch (_) {
         /* ignore */
       }
-      tick();
+      recoverIfHostsMissing();
     };
     start();
     if (global.__cdsHostTimer) {
@@ -2163,7 +2340,10 @@
         clearInterval(global.__cdsHostTimer);
       } catch (_) {}
     }
-    global.__cdsHostTimer = setInterval(tick, 1200);
+    global.__cdsHostTimer = setInterval(function () {
+      stampIfUntagged();
+      recoverIfHostsMissing();
+    }, 1200);
   }
 
   function ensurePanel() {
@@ -2233,14 +2413,22 @@
 
   function apply(config) {
     const cfg = config || {};
-    if (cfg.selectors && typeof cfg.selectors === "object") {
-      selectorMap = Object.assign({}, DEFAULT_SELECTORS, cfg.selectors);
+    if (cfg.selectors && typeof cfg.selectors === "object" && Object.keys(cfg.selectors).length) {
+      selectorMap = cfg.selectors;
+    } else {
+      selectorMap = FALLBACK_SELECTORS;
     }
-    if (cfg.regions && typeof cfg.regions === "object") {
-      regionMap = Object.assign({}, DEFAULT_REGIONS, cfg.regions);
+    if (cfg.regions && typeof cfg.regions === "object" && Object.keys(cfg.regions).length) {
+      regionMap = cfg.regions;
+    } else {
+      regionMap = FALLBACK_REGIONS;
     }
     if (typeof cfg.regionAttr === "string" && cfg.regionAttr) regionAttr = cfg.regionAttr;
-    if (Array.isArray(cfg.holes) && cfg.holes.length) holeList = cfg.holes.slice();
+    if (Array.isArray(cfg.holes)) {
+      holeList = cfg.holes.slice();
+    } else {
+      holeList = FALLBACK_HOLES.slice();
+    }
     if (typeof cfg.holeAttr === "string" && cfg.holeAttr) holeAttr = cfg.holeAttr;
     if (cfg.mappings && typeof cfg.mappings === "object" && Object.keys(cfg.mappings).length) {
       cssMappings = Object.assign({}, DEFAULT_MAPPINGS, cfg.mappings);
@@ -2368,6 +2556,9 @@
     html.removeAttribute("data-cds-video");
     html.removeAttribute("data-cds-still");
     html.removeAttribute("data-cds-palette");
+    REGION_KEYS.forEach(function (key) {
+      html.removeAttribute("data-cds-clear-" + key);
+    });
     [
       "--cds-art",
       "--cds-focus-x",
@@ -2377,6 +2568,26 @@
       "--cds-veil-editor",
       "--cds-veil-composer",
       "--cds-sidebar",
+      "--cds-sidebar-opacity",
+      "--cds-sidebar-blur",
+      "--cds-sidebar-fill",
+      "--cds-sidebar-filter",
+      "--cds-editor-opacity",
+      "--cds-editor-blur",
+      "--cds-editor-fill",
+      "--cds-editor-filter",
+      "--cds-chat-opacity",
+      "--cds-chat-blur",
+      "--cds-chat-fill",
+      "--cds-chat-filter",
+      "--cds-auxiliary-opacity",
+      "--cds-auxiliary-blur",
+      "--cds-auxiliary-fill",
+      "--cds-auxiliary-filter",
+      "--cds-terminal-opacity",
+      "--cds-terminal-blur",
+      "--cds-terminal-fill",
+      "--cds-terminal-filter",
       "--cds-chat-panel",
       "--cds-editor-panel",
       "--cds-editor-canvas",
@@ -2406,31 +2617,40 @@
         return false;
       }
     }
-    const s = selectorMap || DEFAULT_SELECTORS;
+    const s = selectorMap || FALLBACK_SELECTORS;
+    const regions = {
+      sidebar: q('[data-cursor-skin="sidebar"]'),
+      editor: q('[data-cursor-skin="editor"]'),
+      chat: q('[data-cursor-skin="chat"]'),
+      auxiliary: q('[data-cursor-skin="auxiliary"]'),
+      terminal: q('[data-cursor-skin="terminal"]'),
+      titlebar: q('[data-cursor-skin="titlebar"]'),
+      statusbar: q('[data-cursor-skin="statusbar"]'),
+      diff: q('[data-cursor-skin="diff"]'),
+    };
+    const regionHealth = {
+      sidebar: regions.sidebar,
+      editor: regions.editor,
+      chat: regions.chat,
+      auxiliary: regions.auxiliary,
+      terminal: regions.terminal,
+    };
     return {
-      workbench: q(s.workbench || DEFAULT_SELECTORS.workbench),
-      sidebar: q(s.sidebar || DEFAULT_SELECTORS.sidebar),
-      auxiliarybar: q(s.auxiliarybar || DEFAULT_SELECTORS.auxiliarybar),
-      editor: q(s.editor || DEFAULT_SELECTORS.editor),
-      editorPanel: q(s.editorPanel || DEFAULT_SELECTORS.editorPanel),
-      titlebar: q(s.titlebar || DEFAULT_SELECTORS.titlebar),
-      statusbar: q(s.statusbar || DEFAULT_SELECTORS.statusbar),
-      composer: q(s.chat || DEFAULT_SELECTORS.chat),
-      terminal: q(s.terminal || DEFAULT_SELECTORS.terminal),
-      browser: q(s.browser || DEFAULT_SELECTORS.browser),
-      diff: q(s.diff || DEFAULT_SELECTORS.diff),
-      agentsShell: q(s.agentsShell || DEFAULT_SELECTORS.agentsShell),
-      glassRoot: q(s.glassRoot || DEFAULT_SELECTORS.glassRoot),
-      regions: {
-        sidebar: q('[data-cursor-skin="sidebar"]'),
-        editor: q('[data-cursor-skin="editor"]'),
-        chat: q('[data-cursor-skin="chat"]'),
-        auxiliary: q('[data-cursor-skin="auxiliary"]'),
-        terminal: q('[data-cursor-skin="terminal"]'),
-        titlebar: q('[data-cursor-skin="titlebar"]'),
-        statusbar: q('[data-cursor-skin="statusbar"]'),
-        diff: q('[data-cursor-skin="diff"]'),
-      },
+      workbench: q(s.workbench || FALLBACK_SELECTORS.workbench),
+      sidebar: q(s.sidebar || FALLBACK_SELECTORS.sidebar),
+      auxiliarybar: q(s.auxiliarybar || FALLBACK_SELECTORS.auxiliarybar),
+      editor: q(s.editor || FALLBACK_SELECTORS.editor),
+      editorPanel: q(s.editorPanel || FALLBACK_SELECTORS.editorPanel),
+      titlebar: q(s.titlebar || FALLBACK_SELECTORS.titlebar),
+      statusbar: q(s.statusbar || FALLBACK_SELECTORS.statusbar),
+      composer: q(s.chat || FALLBACK_SELECTORS.chat),
+      terminal: q(s.terminal || FALLBACK_SELECTORS.terminal),
+      browser: q(s.browser || FALLBACK_SELECTORS.browser),
+      diff: q(s.diff || FALLBACK_SELECTORS.diff),
+      agentsShell: q(s.agentsShell || FALLBACK_SELECTORS.agentsShell),
+      glassRoot: q(s.glassRoot || FALLBACK_SELECTORS.glassRoot),
+      regions: regions,
+      regionHealth: regionHealth,
       holes: q("[" + (holeAttr || HOLE_ATTR) + "]"),
       skinActive: document.documentElement.getAttribute(MARK) === "1",
       rootPresent: !!document.getElementById(ROOT_ID),

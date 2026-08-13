@@ -6,8 +6,7 @@
 机器可读定义：[`theme/schema/theme.schema.json`](../theme/schema/theme.schema.json)  
 默认值：[`theme/schema/defaults.mjs`](../theme/schema/defaults.mjs)  
 归一化：[`scripts/theme-schema.mjs`](../scripts/theme-schema.mjs)  
-校验：[`theme/validator/validate.mjs`](../theme/validator/validate.mjs)（CLI：`npm run theme:validate`）  
-Creator：[`docs/CREATOR.md`](CREATOR.md)（`npm run creator`）
+校验：[`theme/validator/validate.mjs`](../theme/validator/validate.mjs)（CLI：`npm run theme:validate`）
 
 ```text
 Theme
@@ -70,7 +69,7 @@ Theme
 | `description` | 否 | 说明 |
 | `preview` | 否 | 预览图相对路径，默认 `preview.jpg` |
 
-Runtime 不依赖 identity 做渲染；社区列表 / Creator 会用。
+Runtime 不依赖 identity 做渲染；社区列表会用。
 
 ---
 
@@ -130,8 +129,8 @@ Runtime 不依赖 identity 做渲染；社区列表 / Creator 会用。
 
 | 字段 | 范围 | 说明 |
 |------|------|------|
-| `surface.opacity` | 0–1 | 区域通透感 |
-| `surface.blur` | 0–64 | 区域雾感（Runtime 经 Adapter `mappings.blur` 写成 `--cds-frost-*`） |
+| `surface.opacity` | 0–1 | 区域通透感（原样写入 `--cds-{region}-opacity`，即面板填充 alpha） |
+| `surface.blur` | 0–64 | 区域雾感（原样写入 `--cds-{region}-blur`，单位 px） |
 | `surface.tint` / `border` | string | 预留 |
 
 兼容：顶层 `opacity` 仍可读，Validator 会警告并建议改 `surface.opacity`。  
@@ -141,11 +140,19 @@ Runtime 不依赖 identity 做渲染；社区列表 / Creator 会用。
 
 ### Runtime 映射（当前）
 
-- `sidebar.surface.opacity` → `veil.sidebar`
-- `editor.surface.opacity` (+ transparent) → `veil.editor`
-- `chat.surface.opacity` (+ glass) → `veil.composer`
-- `auxiliary.surface.opacity` → `veil.auxiliary`（**独立**，不再从 chat 推导）
-- `surfaces.*` 随主题包传给 Runtime（含 `opacity` + `blur`）；面板 **Workspace** 三滑块即时改列透明度；Frost 滑块只改全局 blur，不覆盖各列 `surface.blur`
+Theme `workspace.{region}.surface` → injector `cfg.surfaces` → Runtime 一等变量 → CSS：
+
+| Region | opacity | blur | fill（无 alpha） |
+|--------|---------|------|------------------|
+| sidebar | `--cds-sidebar-opacity` | `--cds-sidebar-blur` | `--cds-sidebar-fill` |
+| editor | `--cds-editor-opacity` | `--cds-editor-blur` | `--cds-editor-fill` |
+| chat | `--cds-chat-opacity` | `--cds-chat-blur` | `--cds-chat-fill` |
+| auxiliary | `--cds-auxiliary-opacity` | `--cds-auxiliary-blur` | `--cds-auxiliary-fill` |
+| terminal | `--cds-terminal-opacity` | `--cds-terminal-blur` | `--cds-terminal-fill` |
+
+`opacity: 0.45` → `--cds-sidebar-opacity: 0.45` → Adapter fill `--cds-sidebar: rgba(..., 0.45)`。opacity ≈ 0 时 `--cds-{region}-filter` 为 `none`，避免整窗把墙纸磨砂掉。Editor / auxiliary / terminal **不加** `backdrop-filter`（否则 Browse 变黑）。Browser 打开时 auxiliary 打穿。Right 滑块同时带动 terminal 透明度。
+
+**Frost / Blur 滑块**只改浮动层（`--cds-frost` / `--cds-frost-soft`），**不**模糊墙纸，也**不**改各列 `surface.blur`。
 
 Changes 独立拆分：等 Adapter 成熟后再加 `workspace.changes`，第一版用 `auxiliary`。
 
@@ -225,6 +232,6 @@ npm run theme:validate -- themes/<your-pack>
 - [ ] `identity.id` = 文件夹名
 - [ ] wallpaper / preview 存在且在资源上限内
 - [ ] **没有** DOM 选择器字段
-- [ ] 面板 Skin packs 能加载
+- [ ] 面板 Skin packs 能加载（自测观感；仓库样例主题不保证好看）
 
-下一步（规划第 4 步）：Theme Creator（共用本 Schema + Validator）。
+手写 `theme.json` + Validator 即可。Theme Creator GUI 暂缓。

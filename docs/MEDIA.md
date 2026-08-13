@@ -29,9 +29,9 @@ Focus point in `theme.json` (`art.focusX` / `art.focusY`, 0–1) should sit on t
 
 ### Steam Wallpaper Engine
 
-Paste a **workshop folder** (or use **Browse WE folder…**), e.g.
+Paste a **workshop folder** (or use **Browse WE folder…**), for example:
 
-`E:\SteamLibrary\steamapps\workshop\content\431960\<id>`
+`<SteamLibrary>/steamapps/workshop/content/431960/<workshop-id>`
 
 Dream Skin reads `project.json` and:
 

@@ -98,6 +98,17 @@ function log(...args) {
   }
 }
 
+function regionHealthFromProbe(probe) {
+  const src = (probe && probe.regionHealth) || (probe && probe.regions) || {};
+  return {
+    sidebar: !!src.sidebar,
+    editor: !!src.editor,
+    chat: !!src.chat,
+    auxiliary: !!src.auxiliary,
+    terminal: !!src.terminal,
+  };
+}
+
 function fetchJson(url, timeoutMs = 4000) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
@@ -1362,11 +1373,16 @@ async function main() {
         r.result.rootPresent &&
         r.result.stylePresent
     );
+    const regionHealth = results.map((r) => ({
+      id: r.id,
+      regionHealth: regionHealthFromProbe(r.result),
+    }));
+    const payload = { ok, regionHealth, results };
     if (!ok) {
-      console.error(JSON.stringify({ ok: false, results }, null, 2));
+      console.error(JSON.stringify(payload, null, 2));
       process.exit(2);
     }
-    console.log(JSON.stringify({ ok: true, results }, null, 2));
+    console.log(JSON.stringify(payload, null, 2));
     process.exit(0);
   }
 
@@ -1781,6 +1797,11 @@ async function main() {
           const probe = await injectTarget(t, args.port, themeBundle, "verify");
           const healthy =
             probe?.skinActive && probe?.rootPresent && probe?.hudPresent;
+          const rh = regionHealthFromProbe(probe);
+          const regionMiss = Object.keys(rh).filter((k) => !rh[k]);
+          if (regionMiss.length) {
+            log(`region health ${t.id} miss=${regionMiss.join(",")}`);
+          }
           if (healthy) {
             missStreak.set(t.id, 0);
           } else {

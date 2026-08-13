@@ -31,6 +31,43 @@ const FORBIDDEN_KEYS = new Set([
   "querySelector",
 ]);
 
+/** Objects with additionalProperties: false in theme.schema.json. */
+const ROOT_KEYS = new Set(["schemaVersion", "identity", "appearance", "workspace", "performance"]);
+const IDENTITY_KEYS = new Set([
+  "id",
+  "name",
+  "version",
+  "author",
+  "description",
+  "preview",
+  "tagline",
+  "brandSubtitle",
+]);
+const APPEARANCE_KEYS = new Set([
+  "wallpaper",
+  "baseTheme",
+  "scheme",
+  "paletteId",
+  "palette",
+  "frost",
+  "effects",
+  "art",
+]);
+const WALLPAPER_KEYS = new Set(["type", "src"]);
+const FROST_KEYS = new Set(["enabled", "opacity", "blur"]);
+const EFFECTS_KEYS = new Set(["glow", "vignette"]);
+const ART_KEYS = new Set(["focusX", "focusY", "safeArea", "taskMode"]);
+const SURFACE_KEYS = new Set(["opacity", "blur", "tint", "border"]);
+const PERFORMANCE_KEYS = new Set(["tier"]);
+const KNOWN_WORKSPACE = new Set(WORKSPACE_REGIONS);
+
+function regionAllowedKeys(region) {
+  const keys = new Set(["surface", "opacity", "blur"]);
+  if (region === "editor") keys.add("transparent");
+  if (region === "chat" || region === "terminal") keys.add("glass");
+  return keys;
+}
+
 function isPlainObject(v) {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
@@ -47,14 +84,33 @@ function push(list, code, message, pathHint = "") {
   list.push({ code, message, path: pathHint || undefined });
 }
 
+function rejectUnknownKeys(errors, obj, allowed, pathHint) {
+  if (!isPlainObject(obj)) return;
+  for (const k of Object.keys(obj)) {
+    if (allowed.has(k)) continue;
+    const p = pathHint ? `${pathHint}.${k}` : k;
+    push(errors, "unknown-field", `${p} is not allowed by Theme Contract`, p);
+  }
+}
+
 function walkForbiddenKeys(node, basePath, errors, depth = 0) {
-  if (!isPlainObject(node) || depth > 12) return;
+  if (depth > 12 || node == null) return;
+  if (Array.isArray(node)) {
+    node.forEach((item, i) => {
+      if (isPlainObject(item) || Array.isArray(item)) {
+        const p = basePath ? `${basePath}[${i}]` : `[${i}]`;
+        walkForbiddenKeys(item, p, errors, depth + 1);
+      }
+    });
+    return;
+  }
+  if (!isPlainObject(node)) return;
   for (const [k, v] of Object.entries(node)) {
     const p = basePath ? `${basePath}.${k}` : k;
     if (FORBIDDEN_KEYS.has(k)) {
       push(errors, "forbidden-selector-field", `${p}: Theme must not contain DOM selector fields`, p);
     }
-    if (isPlainObject(v)) walkForbiddenKeys(v, p, errors, depth + 1);
+    if (isPlainObject(v) || Array.isArray(v)) walkForbiddenKeys(v, p, errors, depth + 1);
   }
 }
 
@@ -217,6 +273,11 @@ export function validateThemeDocument(raw, opts = {}) {
   if (identity.preview !== undefined) {
     expectString(errors, identity.preview, "identity.preview", { minLength: 1 });
   }
+  if (identity.tagline !== undefined) expectString(errors, identity.tagline, "identity.tagline");
+  if (identity.brandSubtitle !== undefined) {
+    expectString(errors, identity.brandSubtitle, "identity.brandSubtitle");
+  }
+  rejectUnknownKeys(errors, identity, IDENTITY_KEYS, "identity");
   if (opts.dirName && identity.id && identity.id !== opts.dirName) {
     push(
       errors,
@@ -240,6 +301,7 @@ export function validateThemeDocument(raw, opts = {}) {
         push(errors, "enum", 'appearance.wallpaper.type must be "image" or "video"', "appearance.wallpaper.type");
       }
     }
+    rejectUnknownKeys(errors, wp, WALLPAPER_KEYS, "appearance.wallpaper");
   }
 
   if (appearance.baseTheme !== undefined && !BASE_THEMES.has(appearance.baseTheme)) {
@@ -271,6 +333,7 @@ export function validateThemeDocument(raw, opts = {}) {
       expectBoolean(errors, frost.enabled, "appearance.frost.enabled");
       expectNumberInRange(errors, frost.opacity, "appearance.frost.opacity", 0, 1);
       expectNumberInRange(errors, frost.blur, "appearance.frost.blur", 0, 64);
+      rejectUnknownKeys(errors, frost, FROST_KEYS, "appearance.frost");
     }
   }
 
@@ -281,6 +344,7 @@ export function validateThemeDocument(raw, opts = {}) {
     } else {
       expectBoolean(errors, effects.glow, "appearance.effects.glow");
       expectBoolean(errors, effects.vignette, "appearance.effects.vignette");
+      rejectUnknownKeys(errors, effects, EFFECTS_KEYS, "appearance.effects");
     }
   }
 
@@ -291,8 +355,14 @@ export function validateThemeDocument(raw, opts = {}) {
     } else {
       expectNumberInRange(errors, art.focusX, "appearance.art.focusX", 0, 1);
       expectNumberInRange(errors, art.focusY, "appearance.art.focusY", 0, 1);
+      if (art.safeArea !== undefined) expectString(errors, art.safeArea, "appearance.art.safeArea");
+      if (art.taskMode !== undefined) expectString(errors, art.taskMode, "appearance.art.taskMode");
+      rejectUnknownKeys(errors, art, ART_KEYS, "appearance.art");
     }
   }
+
+  rejectUnknownKeys(errors, appearance, APPEARANCE_KEYS, "appearance");
+  rejectUnknownKeys(errors, raw, ROOT_KEYS, "");
 
   if (!errors.some((e) => String(e.path || "").startsWith("appearance"))) {
     checks.appearance = true;
@@ -329,6 +399,7 @@ export function validateThemeDocument(raw, opts = {}) {
             if (block.surface.border !== undefined) {
               expectString(errors, block.surface.border, `workspace.${region}.surface.border`);
             }
+            rejectUnknownKeys(errors, block.surface, SURFACE_KEYS, `workspace.${region}.surface`);
           }
         }
 
@@ -348,12 +419,12 @@ export function validateThemeDocument(raw, opts = {}) {
         if (region === "terminal" || region === "chat") {
           expectBoolean(errors, block.glass, `workspace.${region}.glass`);
         }
+        rejectUnknownKeys(errors, block, regionAllowedKeys(region), `workspace.${region}`);
       }
-      const known = new Set(WORKSPACE_REGIONS);
       for (const k of Object.keys(raw.workspace)) {
-        if (!known.has(k)) {
+        if (!KNOWN_WORKSPACE.has(k)) {
           push(
-            warnings,
+            errors,
             "unknown-workspace-key",
             `workspace.${k} is not a first-class region (use auxiliary for Changes/Agent for now)`,
             `workspace.${k}`
@@ -371,17 +442,20 @@ export function validateThemeDocument(raw, opts = {}) {
   if (raw.performance !== undefined) {
     if (!isPlainObject(raw.performance)) {
       push(errors, "type", "performance must be an object", "performance");
-    } else if (raw.performance.tier !== undefined) {
-      if (!PERFORMANCE_TIERS.includes(raw.performance.tier)) {
-        push(
-          errors,
-          "enum",
-          `performance.tier must be one of: ${PERFORMANCE_TIERS.join(", ")}`,
-          "performance.tier"
-        );
-      } else {
-        tier = raw.performance.tier;
+    } else {
+      if (raw.performance.tier !== undefined) {
+        if (!PERFORMANCE_TIERS.includes(raw.performance.tier)) {
+          push(
+            errors,
+            "enum",
+            `performance.tier must be one of: ${PERFORMANCE_TIERS.join(", ")}`,
+            "performance.tier"
+          );
+        } else {
+          tier = raw.performance.tier;
+        }
       }
+      rejectUnknownKeys(errors, raw.performance, PERFORMANCE_KEYS, "performance");
     }
   }
 

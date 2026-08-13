@@ -38,10 +38,9 @@ Theme = 工作空间状态描述（不只是壁纸配置）。
 - [x] Theme Contract 定型：`identity` / `appearance` / `workspace` / `performance`
 - [x] Workspace = semantic regions + `surface`（sidebar / editor / chat / auxiliary / terminal）
 - [x] JSON Schema + defaults + normalize（兼容旧扁平包）
-- [x] 官方示例主题 5 个（已迁到 Contract）
+- [x] 官方示例主题 5 个（Contract 样例；**不作为成品推荐**）
 - [x] 文档 [THEME_SCHEMA.md](THEME_SCHEMA.md)
 - [x] Theme Validator（`npm run theme:validate`）
-- [x] Theme Creator MVP（`npm run creator`）
 
 ---
 
@@ -64,12 +63,9 @@ Theme = 工作空间状态描述（不只是壁纸配置）。
 
 ---
 
-## Phase 3 — Theme Creator（v0.4 MVP）
+## Phase 3 — Theme Creator（暂缓）
 
-- [x] 本地 Creator（`npm run creator` → `http://127.0.0.1:3847/`）
-- [x] 与 Validator / Schema 共用 defaults、ranges、资源上限
-- [x] 预览语义 Workspace + 导入 / 校验 / 导出 `theme.zip`
-- 先不做复杂 GUI / 登录
+本地可视化编辑 / 导入导出 `theme.zip` 先不做。手写 `theme.json` + `npm run theme:validate`。
 
 ---
 

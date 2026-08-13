@@ -43,7 +43,7 @@ Chrome（只打标，不进 HUD 透明度滑块）：
 
 ## Mappings
 
-Runtime 把 `surface.opacity` / `surface.blur` 写到这些变量；CSS 只读变量，不读 Theme。
+Runtime 仍把 `surface.opacity` / `surface.blur` 同步到这些 Adapter 变量（兼容旧 CSS / VS Code token）。面板真正的透明度与雾感读一等变量 `--cds-{region}-opacity` / `--cds-{region}-blur` / `--cds-{region}-fill`。CSS 只读变量，不读 Theme。
 
 | 区域 | fill | veil | blur |
 |------|------|------|------|
