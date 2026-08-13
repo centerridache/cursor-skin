@@ -1,46 +1,36 @@
-{
-  "schemaVersion": 2,
-  "id": "default-atmosphere",
-  "name": "Default Atmosphere",
-  "brandSubtitle": "CURSOR SKIN",
-  "tagline": "One image, one mood — code with atmosphere.",
-  "wallpaper": {
-    "type": "image",
-    "src": "wallpaper/main.jpg"
-  },
-  "preview": "preview.jpg",
-  "appearance": "auto",
-  "baseTheme": "Cursor Dark",
-  "scheme": "dark",
-  "paletteId": "",
-  "frost": 40,
-  "environment": {
-    "opacity": 0.62,
-    "blur": 16
-  },
-  "sidebar": {
-    "opacity": 0.42
-  },
-  "chat": {
-    "glass": true
-  },
-  "editor": {
-    "transparent": true
-  },
-  "terminal": {
-    "glass": true
-  },
-  "art": {
-    "focusX": 0.72,
-    "focusY": 0.4,
-    "safeArea": "left",
-    "taskMode": "ambient"
-  },
-  "veil": {
-    "sidebar": 0.28,
-    "auxiliary": 0.26,
-    "editor": 0.32,
-    "composer": 0.22
-  },
-  "colors": null
-}
+{
+  "schemaVersion": 1,
+  "identity": {
+    "id": "default-atmosphere",
+    "name": "Default Atmosphere",
+    "version": "1.0.0",
+    "author": "cursor-skin",
+    "description": "One image, one mood — code with atmosphere.",
+    "preview": "preview.jpg",
+    "tagline": "One image, one mood — code with atmosphere.",
+    "brandSubtitle": "CURSOR SKIN"
+  },
+  "appearance": {
+    "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+    "baseTheme": "Cursor Dark",
+    "scheme": "dark",
+    "paletteId": "",
+    "frost": { "enabled": true, "opacity": 0.4, "blur": 16 },
+    "effects": { "glow": false, "vignette": false },
+    "art": {
+      "focusX": 0.72,
+      "focusY": 0.4,
+      "safeArea": "left",
+      "taskMode": "ambient"
+    }
+  },
+  "workspace": {
+    "sidebar": { "surface": { "opacity": 0.42, "blur": 12 } },
+    "editor": { "surface": { "opacity": 0.72, "blur": 4 }, "transparent": true },
+    "chat": { "surface": { "opacity": 0.5, "blur": 10 }, "glass": true },
+    "auxiliary": { "surface": { "opacity": 0.44, "blur": 12 } },
+    "terminal": { "surface": { "opacity": 0.65, "blur": 8 }, "glass": true }
+  },
+  "performance": { "tier": "balanced" }
+}
+

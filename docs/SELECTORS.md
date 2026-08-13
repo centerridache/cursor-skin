@@ -1,8 +1,7 @@
 # Cursor Dream Skin — DOM Selectors
 
-Validated on a live CDP session (Cursor Agents workbench) against install path
-`E:\cursor project\cursor\Cursor.exe` (custom layout; default installs under
-`%LOCALAPPDATA%\Programs\cursor\` also work).
+Validated on a live CDP session against a Cursor Agents workbench
+(default installs under `%LOCALAPPDATA%\Programs\cursor\` also work).
 
 Re-run after Cursor upgrades:
 
@@ -57,7 +56,8 @@ CSS covers both shells: wallpaper + veil always; part translucency when parts ex
 | `window.CursorSkin` | Public Runtime API v0.2 (`apply`, `getState`, …) |
 | `window.__cursorDreamSkin` | Legacy / injector bridge `{ apply, remove, probe, drainRequests }` |
 
-Authoritative selector map for probe: [`adapters/cursor/default.json`](../adapters/cursor/default.json).
+Authoritative selector + region map: [`adapters/cursor/default.json`](../adapters/cursor/default.json).  
+Runtime stamps `data-cursor-skin` from `regions` and `data-cursor-skin-hole` from `holes`; see [ADAPTER.md](ADAPTER.md).
 See also [RUNTIME_API.md](RUNTIME_API.md).
 
 ## Trusted Types note
@@ -71,7 +71,7 @@ Wallpaper must sit **behind** UI (`z-index: 0`, first in `body`, `pointer-events
 - set `position: relative` / `z-index` on `body` (collapses Agents `position: absolute` layout to height 0)
 - use `z-index: -1` for the wallpaper (often sinks under the window canvas and vanishes)
 
-Agents solid panels (`.agent-panel`, `.glass-sidebar-docked`) must be forced translucent so the art shows through.
+Agents solid panels are tagged `data-cursor-skin` and frosted via CSS variables so the art shows through.
 
 ## Scheme detection
 

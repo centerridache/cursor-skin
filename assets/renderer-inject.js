@@ -7,9 +7,13 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 43;
+  const VERSION = 53;
   const RUNTIME_VERSION = "0.3.0";
-  const PANEL_V = "15";
+  const PANEL_V = "16";
+  const REGION_ATTR = "data-cursor-skin";
+  const HOLE_ATTR = "data-cursor-skin-hole";
+  const REGION_KEYS = ["sidebar", "editor", "chat", "auxiliary", "terminal"];
+  const CHROME_KEYS = ["titlebar", "statusbar", "panel", "diff"];
 
   const DEFAULT_SELECTORS = {
     workbench: ".monaco-workbench",
@@ -22,12 +26,93 @@
     statusbar: ".part.statusbar",
     terminal: '[data-component="terminal-tab-content"], .xterm',
     browser: '[data-component="browser-tab-content"]',
-    diff: '.diff-tab-content, [id*="tabpanel-editor-panel-group-stable-diff"]',
+    diff: ".diff-tab-content, [data-component='diff-tab-content'], [id*='tabpanel-editor-panel-group-stable-diff']",
     agentsShell: ".workspaces-container, .workspace-container",
     glassRoot: '[class*="glass-"]',
   };
 
+  const DEFAULT_REGIONS = {
+    sidebar: [
+      "[data-cds-sidebar-dock='1']",
+      "div:has(> nav.ui-sidebar)",
+      "div:has(> .ui-sidebar)",
+      ".glass-sidebar-docked",
+      "[class*='glass-sidebar-docked']",
+      ".monaco-workbench .part.sidebar",
+      ".monaco-workbench .part.activitybar",
+    ],
+    editor: [
+      ".monaco-workbench .part.editor",
+      ".monaco-workbench .part.editorgroupcontainer",
+      ".monaco-workbench .editor-group-container",
+    ],
+    chat: [".agent-panel", ".aichat-pane", ".composer-bar", "[class*='composer-bar']"],
+    auxiliary: [
+      ".monaco-workbench .part.auxiliarybar",
+      ".editor-panel-container",
+      "[class*='editor-panel-container']",
+    ],
+    terminal: ["[data-component='terminal-tab-content']"],
+    titlebar: [
+      ".part.titlebar",
+      "[data-cds-titlebar='1']",
+      ".glass-17fyfba",
+    ],
+    statusbar: [".part.statusbar"],
+    panel: [".monaco-workbench .part.panel"],
+    diff: [
+      ".diff-tab-content",
+      "[data-component='diff-tab-content']",
+      "[data-component='diff-tab-view-body']",
+      "[id*='tabpanel-editor-panel-group-stable-diff']",
+    ],
+  };
+
+  const DEFAULT_HOLES = [
+    "nav.ui-sidebar",
+    ".ui-sidebar",
+    ".glass-sidebar-header-actions-stack",
+    "[class*='glass-sidebar-header']",
+    ".xterm",
+    ".xterm-viewport",
+    ".xterm-screen",
+    ".xterm-wrapper",
+    ".terminal-wrapper",
+    ".glass-terminal-container",
+    "[data-component='browser-tab-content']",
+    "[id*='tabpanel-editor-panel-group-terminal']",
+    "[id*='tabpanel-editor-panel-group-browser']",
+    ".agent-panel-empty-state-prompt",
+    ".agent-panel-empty-state-footer-region",
+    ".agent-panel-empty-state-footer-actions",
+    "[class*='agent-panel-empty-state']",
+    ".editor-panel-container > hr",
+    "[class*='editor-panel-container'] > hr",
+    "[data-component='diff-tab-content'] .ui-card",
+    "[data-component='diff-tab-content'] .ui-card__header",
+    "[data-component='diff-tab-content'] .ui-default-diff",
+    "[data-cursor-skin='diff'] .ui-card",
+    "[data-cursor-skin='diff'] .ui-card__header",
+    "[data-cursor-skin='diff'] .ui-default-diff",
+    "[data-cursor-skin='diff'] .monaco-editor",
+    "[data-cursor-skin='diff'] .monaco-editor-background",
+    "[data-cursor-skin='diff'] .monaco-diff-editor",
+  ];
+
+  const DEFAULT_MAPPINGS = {
+    sidebar: { fill: "--cds-sidebar", veil: "--cds-veil-sidebar", blur: "--cds-frost-sidebar" },
+    editor: { fill: "--cds-editor-canvas", veil: "--cds-veil-editor", blur: "--cds-frost-editor" },
+    chat: { fill: "--cds-chat-panel", veil: "--cds-veil-composer", blur: "--cds-frost-chat" },
+    auxiliary: { fill: "--cds-editor-panel", veil: "--cds-veil-auxiliary", blur: "--cds-frost-auxiliary" },
+    terminal: { fill: "--cds-terminal-panel", blur: "--cds-frost-terminal" },
+  };
+
   let selectorMap = Object.assign({}, DEFAULT_SELECTORS);
+  let regionMap = Object.assign({}, DEFAULT_REGIONS);
+  let regionAttr = REGION_ATTR;
+  let holeList = DEFAULT_HOLES.slice();
+  let holeAttr = HOLE_ATTR;
+  let cssMappings = Object.assign({}, DEFAULT_MAPPINGS);
 
   const THEMES = [
     { id: "Cursor Dark", label: "Dark", scheme: "dark" },
@@ -667,6 +752,27 @@
       ? prev._lastPaletteTokens
       : null;
   let frostLevel = readFrostLevelSafe();
+  let workspaceOpacity = readWorkspaceOpacitySafe();
+  let workspaceBlur = readWorkspaceBlurSafe();
+  let workspaceSourcePackId = "";
+
+  function clamp01(n, fallback) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return fallback;
+    return Math.min(1, Math.max(0, x));
+  }
+
+  function clampBlur(n, fallback) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return fallback;
+    return Math.min(64, Math.max(0, x));
+  }
+
+  function frostCss(px) {
+    const n = Math.round(clampBlur(px, 0));
+    if (n <= 0) return "none";
+    return "blur(" + n + "px) saturate(1.2)";
+  }
 
   function readFrostLevelSafe() {
     try {
@@ -685,6 +791,66 @@
   function writeFrostLevel(level) {
     try {
       localStorage.setItem("cds-frost", String(level));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function defaultWorkspaceOpacity() {
+    return { sidebar: 0.45, editor: 0.72, auxiliary: 0.45, chat: 0.55, terminal: 0.6 };
+  }
+
+  function defaultWorkspaceBlur() {
+    return { sidebar: 12, editor: 4, chat: 10, auxiliary: 12, terminal: 8 };
+  }
+
+  function readRegionMap(raw, defaults, clampFn) {
+    const d = defaults;
+    const keys = Object.keys(d);
+    const out = {};
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      out[k] = clampFn(raw && raw[k], d[k]);
+    }
+    return out;
+  }
+
+  function readWorkspaceOpacitySafe() {
+    try {
+      const raw = JSON.parse(localStorage.getItem("cds-workspace-opacity") || "");
+      if (raw && typeof raw === "object") {
+        const d = defaultWorkspaceOpacity();
+        const next = readRegionMap(raw, d, clamp01);
+        if (raw.chat == null && raw.editor != null) next.chat = clamp01(raw.editor, d.chat);
+        return next;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return defaultWorkspaceOpacity();
+  }
+
+  function readWorkspaceBlurSafe() {
+    try {
+      const raw = JSON.parse(localStorage.getItem("cds-workspace-blur") || "");
+      if (raw && typeof raw === "object") return readRegionMap(raw, defaultWorkspaceBlur(), clampBlur);
+    } catch (_) {
+      /* ignore */
+    }
+    return defaultWorkspaceBlur();
+  }
+
+  function writeWorkspaceOpacity() {
+    try {
+      localStorage.setItem("cds-workspace-opacity", JSON.stringify(workspaceOpacity));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function writeWorkspaceBlur() {
+    try {
+      localStorage.setItem("cds-workspace-blur", JSON.stringify(workspaceBlur));
     } catch (_) {
       /* ignore */
     }
@@ -720,15 +886,169 @@
     return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
   }
 
-  /** Unified panel opacity — sidebar / chat / right column share one frost curve. */
   function frostAlphas(level) {
     const t = Math.min(100, Math.max(0, level)) / 100;
     return {
-      panel: 0.05 + t * 0.62,
       float: 0.14 + t * 0.42,
-      veil: 0.05 + t * 0.52,
       tool: 0.08 + t * 0.45,
     };
+  }
+
+  function panelRgba(opacity, dark, tokenHex) {
+    const t = clamp01(opacity, 0.5);
+    const a = 0.06 + t * 0.7;
+    if (tokenHex) {
+      const mixed = hexToRgba(tokenHex, a);
+      if (mixed) return mixed;
+    }
+    return dark
+      ? "rgba(8, 10, 18, " + a + ")"
+      : "rgba(255, 255, 255, " + a + ")";
+  }
+
+  function surfaceOpacity(node, fallback) {
+    if (node && typeof node === "object" && typeof node.opacity === "number") {
+      return clamp01(node.opacity, fallback);
+    }
+    return fallback;
+  }
+
+  function surfaceBlur(node, fallback) {
+    if (node && typeof node === "object" && typeof node.blur === "number") {
+      return clampBlur(node.blur, fallback);
+    }
+    return fallback;
+  }
+
+  function ingestWorkspaceFromConfig(cfg) {
+    if (!cfg || typeof cfg !== "object") return false;
+    const dOp = defaultWorkspaceOpacity();
+    const dBlur = defaultWorkspaceBlur();
+    let next = {
+      sidebar: workspaceOpacity.sidebar,
+      editor: workspaceOpacity.editor,
+      auxiliary: workspaceOpacity.auxiliary,
+      chat: workspaceOpacity.chat,
+      terminal: workspaceOpacity.terminal,
+    };
+    let nextBlur = {
+      sidebar: workspaceBlur.sidebar,
+      editor: workspaceBlur.editor,
+      auxiliary: workspaceBlur.auxiliary,
+      chat: workspaceBlur.chat,
+      terminal: workspaceBlur.terminal,
+    };
+    let changed = false;
+    const surfaces = cfg.surfaces;
+    if (surfaces && typeof surfaces === "object") {
+      for (let i = 0; i < REGION_KEYS.length; i++) {
+        const k = REGION_KEYS[i];
+        next[k] = surfaceOpacity(surfaces[k], next[k]);
+        nextBlur[k] = surfaceBlur(surfaces[k], nextBlur[k]);
+      }
+      changed = true;
+    } else if (cfg.veil && typeof cfg.veil === "object") {
+      const v = cfg.veil;
+      if (typeof v.sidebar === "number") next.sidebar = clamp01(v.sidebar, next.sidebar);
+      if (typeof v.editor === "number") next.editor = clamp01(v.editor, next.editor);
+      if (typeof v.auxiliary === "number") next.auxiliary = clamp01(v.auxiliary, next.auxiliary);
+      if (typeof v.composer === "number") next.chat = clamp01(v.composer, next.chat);
+      changed = true;
+    }
+    if (!changed) return false;
+    workspaceOpacity = readRegionMap(next, dOp, clamp01);
+    workspaceBlur = readRegionMap(nextBlur, dBlur, clampBlur);
+    writeWorkspaceOpacity();
+    writeWorkspaceBlur();
+    return true;
+  }
+
+  function shouldIngestWorkspace(cfg) {
+    if (!cfg) return false;
+    if (cfg.forceWorkspace === true) return true;
+    if (!cfg.surfaces && !cfg.veil) return false;
+    try {
+      return !localStorage.getItem("cds-workspace-opacity");
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function syncWorkspaceSliders() {
+    const hud = document.getElementById(HUD_ID);
+    if (!hud) return;
+    const rows = [
+      ["sidebar", workspaceOpacity.sidebar],
+      ["editor", workspaceOpacity.editor],
+      ["auxiliary", workspaceOpacity.auxiliary],
+    ];
+    for (let i = 0; i < rows.length; i++) {
+      const key = rows[i][0];
+      const pct = Math.round(rows[i][1] * 100);
+      const range = hud.querySelector('[data-ws-region="' + key + '"]');
+      const valueEl = hud.querySelector('[data-ws-value="' + key + '"]');
+      if (range && Number(range.value) !== pct) range.value = String(pct);
+      if (valueEl) valueEl.textContent = pct + "%";
+    }
+  }
+
+  function mappingFor(key) {
+    const maps = cssMappings && typeof cssMappings === "object" ? cssMappings : DEFAULT_MAPPINGS;
+    return maps[key] || DEFAULT_MAPPINGS[key] || {};
+  }
+
+  function fillTokenFor(key) {
+    if (!lastPaletteTokens) return "";
+    if (key === "sidebar") return lastPaletteTokens["sideBar.background"] || "";
+    return lastPaletteTokens["editor.background"] || "";
+  }
+
+  function applyWorkspaceSurfaces() {
+    const html = document.documentElement;
+    const dark = html.getAttribute("data-cds-scheme") !== "light";
+    for (let i = 0; i < REGION_KEYS.length; i++) {
+      const key = REGION_KEYS[i];
+      const map = mappingFor(key);
+      const op = clamp01(workspaceOpacity[key], defaultWorkspaceOpacity()[key]);
+      const blur = clampBlur(workspaceBlur[key], defaultWorkspaceBlur()[key]);
+      if (map.fill) html.style.setProperty(map.fill, panelRgba(op, dark, fillTokenFor(key)));
+      if (map.veil) html.style.setProperty(map.veil, String(op));
+      if (map.blur) html.style.setProperty(map.blur, frostCss(blur));
+    }
+    applyVeil({
+      sidebar: workspaceOpacity.sidebar,
+      editor: workspaceOpacity.editor,
+      auxiliary: workspaceOpacity.auxiliary,
+      composer: workspaceOpacity.chat,
+    });
+    tagSidebarDock();
+    syncWorkspaceSliders();
+  }
+
+  function setWorkspaceOpacity(partial, opts) {
+    const p = partial && typeof partial === "object" ? partial : {};
+    const keys = REGION_KEYS;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (typeof p[k] === "number") workspaceOpacity[k] = clamp01(p[k], workspaceOpacity[k]);
+    }
+    if (opts && opts.linkChatToEditor && typeof p.editor === "number") {
+      workspaceOpacity.chat = workspaceOpacity.editor;
+    }
+    writeWorkspaceOpacity();
+    applyWorkspaceSurfaces();
+    return Object.assign({}, workspaceOpacity);
+  }
+
+  function setWorkspaceBlur(partial) {
+    const p = partial && typeof partial === "object" ? partial : {};
+    for (let i = 0; i < REGION_KEYS.length; i++) {
+      const k = REGION_KEYS[i];
+      if (typeof p[k] === "number") workspaceBlur[k] = clampBlur(p[k], workspaceBlur[k]);
+    }
+    writeWorkspaceBlur();
+    applyWorkspaceSurfaces();
+    return Object.assign({}, workspaceBlur);
   }
 
   function tagSidebarDock() {
@@ -736,11 +1056,84 @@
       const navs = document.querySelectorAll("nav.ui-sidebar, .ui-sidebar");
       for (let i = 0; i < navs.length; i++) {
         const dock = navs[i].parentElement;
-        if (dock) dock.setAttribute("data-cds-sidebar-dock", "1");
+        if (dock) {
+          dock.setAttribute("data-cds-sidebar-dock", "1");
+          dock.setAttribute(regionAttr || REGION_ATTR, "sidebar");
+        }
       }
     } catch (_) {
       /* ignore */
     }
+  }
+
+  function splitSelectorList(input) {
+    if (Array.isArray(input)) {
+      const out = [];
+      for (let i = 0; i < input.length; i++) {
+        const part = splitSelectorList(input[i]);
+        for (let j = 0; j < part.length; j++) out.push(part[j]);
+      }
+      return out;
+    }
+    const s = String(input || "");
+    const parts = [];
+    let buf = "";
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === "[") depth += 1;
+      else if (c === "]" && depth) depth -= 1;
+      if (c === "," && depth === 0) {
+        const t = buf.trim();
+        if (t) parts.push(t);
+        buf = "";
+      } else {
+        buf += c;
+      }
+    }
+    const last = buf.trim();
+    if (last) parts.push(last);
+    return parts;
+  }
+
+  function skipSkinHost(el) {
+    if (!el || !el.getAttribute) return true;
+    if (el.id === ROOT_ID || el.id === HUD_ID || el.id === STYLE_ID) return true;
+    if (el.closest && el.closest("#" + HUD_ID)) return true;
+    return false;
+  }
+
+  function stampSelectorList(list, attr, value) {
+    const sels = splitSelectorList(list || []);
+    for (let i = 0; i < sels.length; i++) {
+      let nodes;
+      try {
+        nodes = document.querySelectorAll(sels[i]);
+      } catch (_) {
+        continue;
+      }
+      for (let n = 0; n < nodes.length; n++) {
+        const el = nodes[n];
+        if (skipSkinHost(el)) continue;
+        el.setAttribute(attr, value);
+      }
+    }
+  }
+
+  function tagAdapterRegions() {
+    const attr = regionAttr || REGION_ATTR;
+    const regions = regionMap && typeof regionMap === "object" ? regionMap : DEFAULT_REGIONS;
+    const keys = REGION_KEYS.concat(CHROME_KEYS);
+    for (let r = 0; r < keys.length; r++) {
+      const key = keys[r];
+      stampSelectorList(regions[key] || [], attr, key);
+    }
+    tagAdapterHoles();
+  }
+
+  function tagAdapterHoles() {
+    const attr = holeAttr || HOLE_ATTR;
+    stampSelectorList(holeList && holeList.length ? holeList : DEFAULT_HOLES, attr, "1");
   }
 
   function applyFrostLevel(level) {
@@ -749,26 +1142,12 @@
     const a = frostAlphas(frostLevel);
     const html = document.documentElement;
     html.style.setProperty("--cds-frost-level", String(frostLevel));
+    const t = frostLevel / 100;
+    const blur = Math.round(8 + t * 28);
+    const soft = Math.round(6 + t * 18);
+    html.style.setProperty("--cds-frost", "blur(" + blur + "px) saturate(1.25)");
+    html.style.setProperty("--cds-frost-soft", "blur(" + soft + "px) saturate(1.15)");
     const dark = html.getAttribute("data-cds-scheme") !== "light";
-    let side;
-    let panel;
-    if (lastPaletteTokens) {
-      side = hexToRgba(lastPaletteTokens["sideBar.background"], a.panel);
-      panel = hexToRgba(lastPaletteTokens["editor.background"], a.panel);
-    }
-    if (!side) {
-      side = dark
-        ? "rgba(8, 10, 18, " + a.panel + ")"
-        : "rgba(255, 255, 255, " + a.panel + ")";
-    }
-    if (!panel) {
-      panel = dark
-        ? "rgba(12, 14, 22, " + a.panel + ")"
-        : "rgba(255, 255, 255, " + a.panel + ")";
-    }
-    html.style.setProperty("--cds-sidebar", side);
-    html.style.setProperty("--cds-chat-panel", panel);
-    html.style.setProperty("--cds-editor-panel", panel);
     html.style.setProperty(
       "--cds-tool-surface",
       dark ? "rgba(8, 10, 14, " + a.tool + ")" : "rgba(248, 250, 252, " + a.tool + ")"
@@ -777,16 +1156,10 @@
       "--cds-float",
       dark ? "rgba(12, 14, 22, " + a.float + ")" : "rgba(18, 22, 34, " + a.float + ")"
     );
-    applyVeil({
-      sidebar: a.veil,
-      auxiliary: a.veil,
-      editor: a.veil,
-      composer: a.veil,
-    });
     tagSidebarDock();
     const label = document.querySelector("#cursor-dream-skin-hud .cds-frost-value");
     if (label) label.textContent = frostLevel + "%";
-    const slider = document.querySelector("#cursor-dream-skin-hud .cds-frost-range");
+    const slider = document.querySelector("#cursor-dream-skin-hud .cds-frost-range:not([data-ws-region])");
     if (slider && Number(slider.value) !== frostLevel) slider.value = String(frostLevel);
   }
 
@@ -796,12 +1169,14 @@
       lastPaletteTokens = null;
       html.removeAttribute("data-cds-palette");
       applyFrostLevel(frostLevel);
+      applyWorkspaceSurfaces();
       return;
     }
     lastPaletteTokens = tokens;
     const accent = tokens["button.background"] || tokens.focusBorder || "";
     const border = hexToRgba(tokens.focusBorder || tokens["button.background"], 0.35);
     applyFrostLevel(frostLevel);
+    applyWorkspaceSurfaces();
     if (accent) html.style.setProperty("--cds-accent", accent);
     if (border) html.style.setProperty("--cds-float-border", border);
     html.setAttribute("data-cds-palette", "1");
@@ -817,6 +1192,7 @@
       let mode = "";
       if (/browser/.test(text)) mode = "browser";
       else if (/powershell|terminal|cmd|pwsh/.test(text)) mode = "terminal";
+      else if (/changes|diff/.test(text)) mode = "diff";
       if (mode) html.setAttribute("data-cds-tool-pane", mode);
       else html.removeAttribute("data-cds-tool-pane");
     } catch (_) {
@@ -1167,33 +1543,61 @@
     }
   }
 
+  function viewportBox() {
+    const el = document.documentElement;
+    const vv = window.visualViewport;
+    const heights = [
+      el && el.clientHeight,
+      window.innerHeight,
+      vv && vv.height,
+    ];
+    const widths = [
+      el && el.clientWidth,
+      window.innerWidth,
+      vv && vv.width,
+    ];
+    const hOk = heights.filter(function (n) {
+      return typeof n === "number" && n >= 320 && n <= 2200;
+    });
+    const wOk = widths.filter(function (n) {
+      return typeof n === "number" && n >= 480 && n <= 3840;
+    });
+    return {
+      w: wOk.length ? Math.max.apply(null, wOk) : 1200,
+      h: hOk.length ? Math.min.apply(null, hOk) : 800,
+      ox: 0,
+      oy: 0,
+    };
+  }
+
   function panelSize(hud) {
     const collapsed = hud.getAttribute("data-collapsed") !== "0";
-    const rect = hud.getBoundingClientRect();
     return {
       collapsed: collapsed,
-      w: collapsed ? 118 : Math.min(280, rect.width || 240),
-      h: collapsed ? 40 : Math.min(560, Math.max(rect.height || 40, 40)),
+      w: collapsed ? 118 : 260,
+      h: collapsed ? 40 : Math.min(560, Math.max(hud.getBoundingClientRect().height || 320, 40)),
     };
   }
 
   function defaultPanelPos(hud) {
     const s = panelSize(hud);
+    const vp = viewportBox();
     return {
-      x: Math.max(8, window.innerWidth - s.w - 16),
-      y: Math.max(8, window.innerHeight - s.h - 16),
+      x: Math.max(vp.ox + 8, vp.ox + vp.w - s.w - 16),
+      y: Math.max(vp.oy + 44, vp.oy + vp.h - s.h - 16),
     };
   }
 
   function clampPanel(hud, left, top) {
     const s = panelSize(hud);
+    const vp = viewportBox();
     const margin = 8;
-    // Stay out of the native title-bar drag strip (Windows snap / window move).
-    const minY = 44;
-    const maxX = Math.max(margin, window.innerWidth - s.w - margin);
-    const maxY = Math.max(minY, window.innerHeight - s.h - margin);
+    const minY = 44 + vp.oy;
+    const minX = margin + vp.ox;
+    const maxX = Math.max(minX, vp.ox + vp.w - s.w - margin);
+    const maxY = Math.max(minY, vp.oy + vp.h - s.h - margin);
     return {
-      x: Math.min(Math.max(margin, left), maxX),
+      x: Math.min(Math.max(minX, left), maxX),
       y: Math.min(Math.max(minY, top), maxY),
     };
   }
@@ -1210,8 +1614,21 @@
   function applyPanelPosition(hud) {
     const pos = readPos();
     if (!pos) {
-      const d = defaultCornerPos(hud);
+      const d = defaultPanelPos(hud);
       placePanel(hud, d.x, d.y);
+      return;
+    }
+    const vp = viewportBox();
+    const offscreen =
+      pos.y > vp.oy + vp.h - 8 ||
+      pos.x > vp.ox + vp.w - 8 ||
+      pos.y < vp.oy - 40 ||
+      pos.x < vp.ox - 40;
+    const coversNav = pos.x < 240 && pos.y < 140;
+    if (offscreen || coversNav) {
+      const d = defaultPanelPos(hud);
+      placePanel(hud, d.x, d.y);
+      writePos(d.x, d.y);
       return;
     }
     placePanel(hud, pos.x, pos.y);
@@ -1528,12 +1945,60 @@
     }
     body.appendChild(palMount);
 
+    body.appendChild(sectionTitle("Workspace"));
+    function makeWsSlider(label, key, hint) {
+      const row = document.createElement("div");
+      row.className = "cds-frost-row cds-ws-row";
+      const head = document.createElement("div");
+      head.className = "cds-frost-head";
+      const lab = document.createElement("div");
+      lab.className = "cds-frost-label";
+      lab.textContent = label;
+      const val = document.createElement("div");
+      val.className = "cds-frost-value";
+      val.setAttribute("data-ws-value", key);
+      val.textContent = Math.round(workspaceOpacity[key] * 100) + "%";
+      head.appendChild(lab);
+      head.appendChild(val);
+      row.appendChild(head);
+      const range = document.createElement("input");
+      range.type = "range";
+      range.min = "0";
+      range.max = "100";
+      range.step = "1";
+      range.value = String(Math.round(workspaceOpacity[key] * 100));
+      range.className = "cds-frost-range";
+      range.setAttribute("data-ws-region", key);
+      range.title = hint;
+      range.addEventListener("input", function () {
+        const n = (Number(range.value) || 0) / 100;
+        const patch = {};
+        patch[key] = n;
+        const api = global.__cursorDreamSkin;
+        const opts = { linkChatToEditor: key === "editor" };
+        if (api && typeof api.setWorkspaceOpacity === "function") {
+          api.setWorkspaceOpacity(patch, opts);
+        } else {
+          setWorkspaceOpacity(patch, opts);
+        }
+      });
+      row.appendChild(range);
+      return row;
+    }
+    body.appendChild(makeWsSlider("Sidebar", "sidebar", "Left column · files / explorer"));
+    body.appendChild(makeWsSlider("Editor", "editor", "Center · code (chat follows)"));
+    body.appendChild(makeWsSlider("Right", "auxiliary", "Right column · Changes / browser"));
+    const wsHint = document.createElement("div");
+    wsHint.className = "cds-hud-note";
+    wsHint.textContent = "Three columns · lower = more wallpaper";
+    body.appendChild(wsHint);
+
     body.appendChild(sectionTitle("Frost"));
     const frostRow = document.createElement("div");
     frostRow.className = "cds-frost-row";
     const frostLabel = document.createElement("div");
     frostLabel.className = "cds-frost-label";
-    frostLabel.textContent = "UI opacity";
+    frostLabel.textContent = "Blur";
     const frostValue = document.createElement("div");
     frostValue.className = "cds-frost-value";
     frostValue.textContent = frostLevel + "%";
@@ -1549,18 +2014,17 @@
     frostRange.step = "1";
     frostRange.value = String(frostLevel);
     frostRange.className = "cds-frost-range";
-    frostRange.title = "Sidebar + chat + right column · 0 = clearer wallpaper · 100 = denser frost";
+    frostRange.title = "Global blur · does not change column opacity";
     frostRange.addEventListener("input", function () {
       const api = global.__cursorDreamSkin;
       const n = Number(frostRange.value) || 0;
-      // Always call through the live API — panel buttons must not close over a stale applyFrostLevel.
       if (api && typeof api.setFrostLevel === "function") api.setFrostLevel(n);
       else applyFrostLevel(n);
     });
     frostRow.appendChild(frostRange);
     const frostHint = document.createElement("div");
     frostHint.className = "cds-hud-note";
-    frostHint.textContent = "Lower = more wallpaper · Higher = more readable panels";
+    frostHint.textContent = "Global glass blur only";
     frostRow.appendChild(frostHint);
     body.appendChild(frostRow);
 
@@ -1628,6 +2092,80 @@
     hud.appendChild(body);
   }
 
+  function rehomeSkinHosts() {
+    const body = document.body;
+    if (!body) return false;
+    let root = document.getElementById(ROOT_ID) || global.__cdsHostRoot;
+    if (root) {
+      global.__cdsHostRoot = root;
+      if (!root.isConnected || root.parentElement !== body) {
+        body.insertBefore(root, body.firstChild);
+      }
+    }
+    let hud = document.getElementById(HUD_ID) || global.__cdsHostHud;
+    if (hud) {
+      global.__cdsHostHud = hud;
+      if (!hud.isConnected || !body.contains(hud)) {
+        body.appendChild(hud);
+      }
+    }
+    return !!(document.getElementById(ROOT_ID) && document.getElementById(HUD_ID));
+  }
+
+  function ensureHostWatch() {
+    if (global.__cdsHostWatch === VERSION) return;
+    global.__cdsHostWatch = VERSION;
+    const tick = function () {
+      tagSidebarDock();
+      tagAdapterRegions();
+      const ok = rehomeSkinHosts();
+      if (ok || global.__cdsReapplying) return;
+      const cfg = global.__cdsLastApplyConfig;
+      if (!cfg) return;
+      global.__cdsReapplying = true;
+      try {
+        apply(
+          Object.assign({}, cfg, {
+            skipMediaReload: !!document.getElementById(ROOT_ID),
+            preserveCustomMedia: true,
+          })
+        );
+      } catch (_) {
+        /* ignore */
+      }
+      global.__cdsReapplying = false;
+    };
+    if (global.__cdsHostMo) {
+      try {
+        global.__cdsHostMo.disconnect();
+      } catch (_) {}
+    }
+    const mo = new MutationObserver(function () {
+      tick();
+    });
+    global.__cdsHostMo = mo;
+    const start = function () {
+      if (!document.body) {
+        setTimeout(start, 40);
+        return;
+      }
+      try {
+        mo.observe(document.documentElement, { childList: true });
+        mo.observe(document.body, { childList: true });
+      } catch (_) {
+        /* ignore */
+      }
+      tick();
+    };
+    start();
+    if (global.__cdsHostTimer) {
+      try {
+        clearInterval(global.__cdsHostTimer);
+      } catch (_) {}
+    }
+    global.__cdsHostTimer = setInterval(tick, 1200);
+  }
+
   function ensurePanel() {
     let hud = document.getElementById(HUD_ID);
     if (hud && hud.getAttribute("data-cds-panel-v") !== PANEL_V) {
@@ -1676,7 +2214,17 @@
 
     rebuildPanelBody(hud);
     (document.body || document.documentElement).appendChild(hud);
-    applyPanelPosition(hud);
+    global.__cdsHostHud = hud;
+    global.__cdsHostRoot = document.getElementById(ROOT_ID) || global.__cdsHostRoot;
+    try {
+      applyPanelPosition(hud);
+    } catch (e) {
+      try {
+        console.warn("[Dream Skin] panel position:", e && e.message ? e.message : e);
+      } catch (_) {}
+      const d = defaultPanelPos(hud);
+      placePanel(hud, d.x, d.y);
+    }
     bindPanelViewport(hud);
     setCollapsed(hud, readCollapsed());
     setPanelActive();
@@ -1688,6 +2236,15 @@
     if (cfg.selectors && typeof cfg.selectors === "object") {
       selectorMap = Object.assign({}, DEFAULT_SELECTORS, cfg.selectors);
     }
+    if (cfg.regions && typeof cfg.regions === "object") {
+      regionMap = Object.assign({}, DEFAULT_REGIONS, cfg.regions);
+    }
+    if (typeof cfg.regionAttr === "string" && cfg.regionAttr) regionAttr = cfg.regionAttr;
+    if (Array.isArray(cfg.holes) && cfg.holes.length) holeList = cfg.holes.slice();
+    if (typeof cfg.holeAttr === "string" && cfg.holeAttr) holeAttr = cfg.holeAttr;
+    if (cfg.mappings && typeof cfg.mappings === "object" && Object.keys(cfg.mappings).length) {
+      cssMappings = Object.assign({}, DEFAULT_MAPPINGS, cfg.mappings);
+    }
     frostLevel = readFrostLevel();
     if (typeof cfg.frost === "number" && !Number.isNaN(cfg.frost)) {
       frostLevel = Math.min(100, Math.max(0, Math.round(cfg.frost)));
@@ -1697,6 +2254,7 @@
       writeFrostLevel(frostLevel);
     }
     ensureStyle(cfg.cssText || "");
+    global.__cdsLastApplyConfig = cfg;
     ensureRoot(cfg.imageDataUrl || "", cfg.art || {}, cfg.videoUrl || "", cfg.imageUrl || "", {
       skipMediaReload: cfg.skipMediaReload === true,
       resetWallpaper: cfg.resetWallpaper === true,
@@ -1708,6 +2266,10 @@
     });
     if (cfg.paletteTokens) lastPaletteTokens = cfg.paletteTokens;
     else if (cfg.paletteId === "") lastPaletteTokens = null;
+    if (shouldIngestWorkspace(cfg)) {
+      ingestWorkspaceFromConfig(cfg);
+      if (typeof cfg.themePackId === "string") workspaceSourcePackId = cfg.themePackId;
+    }
     applyPaletteTint(cfg.paletteTokens === undefined ? lastPaletteTokens : cfg.paletteTokens || null);
     const html = document.documentElement;
     html.setAttribute(MARK, "1");
@@ -1723,6 +2285,9 @@
         : schemeForTheme(cfg.themeId || activeThemeId);
     html.setAttribute("data-cds-scheme", scheme);
     applyFrostLevel(frostLevel);
+    applyWorkspaceSurfaces();
+    tagSidebarDock();
+    tagAdapterRegions();
     tagFloatingChrome();
     syncTitleBarVars();
     healToolPaneDamage();
@@ -1732,6 +2297,8 @@
     try {
       ensurePanel();
       setPanelActive();
+      ensureHostWatch();
+      rehomeSkinHosts();
     } catch (e) {
       try {
         console.warn("[Dream Skin] panel error:", e && e.message ? e.message : e);
@@ -1747,8 +2314,26 @@
       themePackId: activeThemePackId,
       wallpaperLabel: wallpaperLabel,
       frost: frostLevel,
+      workspace: snapshotWorkspace(),
       video: !!cfg.videoUrl,
       imageUrl: !!cfg.imageUrl,
+    };
+  }
+
+  function snapshotWorkspace() {
+    return {
+      sidebar: workspaceOpacity.sidebar,
+      editor: workspaceOpacity.editor,
+      auxiliary: workspaceOpacity.auxiliary,
+      chat: workspaceOpacity.chat,
+      terminal: workspaceOpacity.terminal,
+      blur: {
+        sidebar: workspaceBlur.sidebar,
+        editor: workspaceBlur.editor,
+        chat: workspaceBlur.chat,
+        auxiliary: workspaceBlur.auxiliary,
+        terminal: workspaceBlur.terminal,
+      },
     };
   }
 
@@ -1761,6 +2346,21 @@
     if (hud) hud.remove();
     document.querySelectorAll("[data-cds-titlebar]").forEach(function (el) {
       el.removeAttribute("data-cds-titlebar");
+    });
+    document.querySelectorAll("[" + (regionAttr || REGION_ATTR) + "]").forEach(function (el) {
+      el.removeAttribute(regionAttr || REGION_ATTR);
+    });
+    document.querySelectorAll("[data-cursor-skin]").forEach(function (el) {
+      el.removeAttribute("data-cursor-skin");
+    });
+    document.querySelectorAll("[" + (holeAttr || HOLE_ATTR) + "]").forEach(function (el) {
+      el.removeAttribute(holeAttr || HOLE_ATTR);
+    });
+    document.querySelectorAll("[data-cursor-skin-hole]").forEach(function (el) {
+      el.removeAttribute("data-cursor-skin-hole");
+    });
+    document.querySelectorAll("[data-cds-sidebar-dock]").forEach(function (el) {
+      el.removeAttribute("data-cds-sidebar-dock");
     });
     const html = document.documentElement;
     html.removeAttribute(MARK);
@@ -1779,6 +2379,13 @@
       "--cds-sidebar",
       "--cds-chat-panel",
       "--cds-editor-panel",
+      "--cds-editor-canvas",
+      "--cds-terminal-panel",
+      "--cds-frost-sidebar",
+      "--cds-frost-editor",
+      "--cds-frost-chat",
+      "--cds-frost-auxiliary",
+      "--cds-frost-terminal",
       "--cds-accent",
       "--cds-float-border",
       "--vscode-titleBar-activeBackground",
@@ -1814,6 +2421,17 @@
       diff: q(s.diff || DEFAULT_SELECTORS.diff),
       agentsShell: q(s.agentsShell || DEFAULT_SELECTORS.agentsShell),
       glassRoot: q(s.glassRoot || DEFAULT_SELECTORS.glassRoot),
+      regions: {
+        sidebar: q('[data-cursor-skin="sidebar"]'),
+        editor: q('[data-cursor-skin="editor"]'),
+        chat: q('[data-cursor-skin="chat"]'),
+        auxiliary: q('[data-cursor-skin="auxiliary"]'),
+        terminal: q('[data-cursor-skin="terminal"]'),
+        titlebar: q('[data-cursor-skin="titlebar"]'),
+        statusbar: q('[data-cursor-skin="statusbar"]'),
+        diff: q('[data-cursor-skin="diff"]'),
+      },
+      holes: q("[" + (holeAttr || HOLE_ATTR) + "]"),
       skinActive: document.documentElement.getAttribute(MARK) === "1",
       rootPresent: !!document.getElementById(ROOT_ID),
       stylePresent: !!document.getElementById(STYLE_ID),
@@ -1824,6 +2442,7 @@
       activeThemePackId: activeThemePackId,
       wallpaperLabel: wallpaperLabel,
       frostLevel: frostLevel,
+      workspace: snapshotWorkspace(),
       runtimeVersion: RUNTIME_VERSION,
       title: document.title || "",
       bodyClasses: document.body ? String(document.body.className).slice(0, 240) : "",
@@ -1835,6 +2454,7 @@
       runtimeVersion: RUNTIME_VERSION,
       payloadVersion: VERSION,
       frost: frostLevel,
+      workspace: snapshotWorkspace(),
       scheme: detectScheme(),
       themeId: activeThemeId,
       paletteId: activePaletteId,
@@ -1854,6 +2474,24 @@
       applyFrostLevel(p.frost);
     } else if (p.frost && typeof p.frost === "object") {
       if (typeof p.frost.level === "number") applyFrostLevel(p.frost.level);
+    }
+    if (p.workspace && typeof p.workspace === "object") {
+      const patch = {};
+      const blurPatch = {};
+      REGION_KEYS.forEach(function (k) {
+        const block = p.workspace[k];
+        if (typeof block === "number") patch[k] = block;
+        else if (block && typeof block === "object") {
+          if (typeof block.opacity === "number") patch[k] = block.opacity;
+          if (typeof block.blur === "number") blurPatch[k] = block.blur;
+          if (block.surface && typeof block.surface === "object") {
+            if (typeof block.surface.opacity === "number") patch[k] = block.surface.opacity;
+            if (typeof block.surface.blur === "number") blurPatch[k] = block.surface.blur;
+          }
+        }
+      });
+      if (Object.keys(patch).length) setWorkspaceOpacity(patch);
+      if (Object.keys(blurPatch).length) setWorkspaceBlur(blurPatch);
     }
     if (typeof p.themePackId === "string" && p.themePackId) {
       queueThemePack(p.themePackId);
@@ -1890,6 +2528,8 @@
     queuePalette: queuePalette,
     queueThemePack: queueThemePack,
     setFrostLevel: applyFrostLevel,
+    setWorkspaceOpacity: setWorkspaceOpacity,
+    setWorkspaceBlur: setWorkspaceBlur,
     drainRequests: drainRequests,
     themes: THEMES,
     version: VERSION,
@@ -1924,6 +2564,8 @@
     apply: cursorSkinApply,
     getState: getState,
     setFrost: applyFrostLevel,
+    setWorkspace: setWorkspaceOpacity,
+    setWorkspaceBlur: setWorkspaceBlur,
     listThemes: function () {
       return themePackCatalog.slice();
     },

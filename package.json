@@ -7,7 +7,9 @@
   "scripts": {
     "inject": "node scripts/injector.mjs",
     "verify": "node scripts/injector.mjs --verify",
-    "probe": "node scripts/probe-dom.mjs"
+    "probe": "node scripts/probe-dom.mjs",
+    "theme:validate": "node scripts/theme-validate.mjs",
+    "creator": "node scripts/creator-server.mjs --open"
   },
   "engines": {
     "node": ">=18"

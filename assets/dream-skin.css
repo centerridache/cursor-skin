@@ -1,7 +1,7 @@
-/* Cursor Dream Skin — Codex-style: continuous wallpaper under floating frosted chrome.
+/* Cursor Dream Skin — wallpaper + frosted chrome.
  *
- * Selector authority for probe/health: adapters/cursor/default.json
- * (CSS below still hardcodes many of the same selectors — update both on Cursor DOM shifts.)
+ * Surfaces: Adapter stamps [data-cursor-skin=region]; holes stamp [data-cursor-skin-hole].
+ * CSS styles those attributes. Cursor class names belong in adapters/cursor/default.json.
  */
 
 html[data-cursor-dream-skin="1"] {
@@ -19,6 +19,13 @@ html[data-cursor-dream-skin="1"] {
   --cds-sidebar: rgba(12, 16, 28, 0.16);
   --cds-chat-panel: rgba(12, 14, 22, 0.42);
   --cds-editor-panel: rgba(12, 14, 22, 0.22);
+  --cds-editor-canvas: rgba(12, 14, 22, 0.5);
+  --cds-terminal-panel: transparent;
+  --cds-frost-sidebar: var(--cds-frost);
+  --cds-frost-editor: none;
+  --cds-frost-chat: none;
+  --cds-frost-auxiliary: none;
+  --cds-frost-terminal: none;
   --cds-tool-surface: rgba(10, 12, 18, 0.28);
   --cds-accent: #6ea8ff;
   --cds-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
@@ -179,58 +186,44 @@ html[data-cursor-dream-skin="1"] .workspace-container {
   max-height: 100% !important;
 }
 
-/* Unified columns — Frost slider drives --cds-sidebar / --cds-chat-panel / --cds-editor-panel */
-html[data-cursor-dream-skin="1"] .agent-panel {
-  background: var(--cds-chat-panel) !important;
-  background-color: var(--cds-chat-panel) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-
-/* Agents sidebar dock: Cursor dropped .glass-sidebar-docked; parent of nav is solid #181818 */
-html[data-cursor-dream-skin="1"] .glass-sidebar-docked,
-html[data-cursor-dream-skin="1"] [class*="glass-sidebar-docked"],
-html[data-cursor-dream-skin="1"] [data-cds-sidebar-dock="1"],
-html[data-cursor-dream-skin="1"] div:has(> nav.ui-sidebar),
-html[data-cursor-dream-skin="1"] div:has(> .ui-sidebar) {
+/* Semantic Workspace surfaces — Adapter stamps [data-cursor-skin], CSS never needs Cursor class names here. */
+html[data-cursor-dream-skin="1"] [data-cursor-skin="sidebar"] {
   background-color: var(--cds-sidebar) !important;
   background-image: none !important;
-  backdrop-filter: var(--cds-frost) !important;
-  -webkit-backdrop-filter: var(--cds-frost) !important;
+  backdrop-filter: var(--cds-frost-sidebar, var(--cds-frost)) !important;
+  -webkit-backdrop-filter: var(--cds-frost-sidebar, var(--cds-frost)) !important;
   border-right: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
 }
 
-html[data-cursor-dream-skin="1"] .ui-sidebar,
-html[data-cursor-dream-skin="1"] nav.ui-sidebar {
-  background: transparent !important;
-  background-color: transparent !important;
+html[data-cursor-dream-skin="1"] [data-cursor-skin="chat"] {
+  background: var(--cds-chat-panel) !important;
+  background-color: var(--cds-chat-panel) !important;
+  backdrop-filter: var(--cds-frost-chat, none) !important;
+  -webkit-backdrop-filter: var(--cds-frost-chat, none) !important;
+  box-shadow: none !important;
 }
 
-/* Right editor / Browse host — same frost curve as chat (native Browser page stays opaque) */
-html[data-cursor-dream-skin="1"] .editor-panel-container,
-html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] {
+html[data-cursor-dream-skin="1"] [data-cursor-skin="auxiliary"] {
   background-color: var(--cds-editor-panel) !important;
   background-image: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+  backdrop-filter: var(--cds-frost-auxiliary, none) !important;
+  -webkit-backdrop-filter: var(--cds-frost-auxiliary, none) !important;
   border-left: 1px solid var(--cds-float-border) !important;
   box-shadow: none !important;
 }
 
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
-  background-color: transparent !important;
-  background-image: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-left: 1px solid var(--cds-float-border) !important;
-  box-shadow: none !important;
+html[data-cursor-dream-skin="1"] [data-cursor-skin="editor"] {
+  background-color: var(--cds-editor-canvas) !important;
 }
 
-/* Terminal host stays clear so wallpaper / xterm transparency work; Browser page is native-opaque */
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] .editor-panel-container,
-html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [class*="editor-panel-container"] {
+html[data-cursor-dream-skin="1"] [data-cursor-skin="terminal"] {
+  background-color: var(--cds-terminal-panel, transparent) !important;
+  backdrop-filter: var(--cds-frost-terminal, none) !important;
+  -webkit-backdrop-filter: var(--cds-frost-terminal, none) !important;
+}
+
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-cursor-skin="auxiliary"] {
   background-color: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -244,35 +237,62 @@ html[data-cursor-dream-skin="1"] {
   --vscode-editorPane-background: var(--cds-editor-panel) !important;
 }
 
-/* Kill Cursor's solid #141414 plates around Agents terminal */
-html[data-cursor-dream-skin="1"] [data-component="terminal-tab-content"],
-html[data-cursor-dream-skin="1"] [data-component="terminal-tab-content"] div,
-html[data-cursor-dream-skin="1"] [data-component="browser-tab-content"],
-html[data-cursor-dream-skin="1"] [data-component="browser-tab-content"] div,
-html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-terminal"],
-html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-browser"],
-html[data-cursor-dream-skin="1"] .glass-terminal-container,
-html[data-cursor-dream-skin="1"] .terminal-wrapper,
-html[data-cursor-dream-skin="1"] .xterm-wrapper,
-html[data-cursor-dream-skin="1"] .xterm,
-html[data-cursor-dream-skin="1"] .xterm-viewport,
-html[data-cursor-dream-skin="1"] .xterm-screen {
+/* Inner hole-punches: Adapter stamps [data-cursor-skin-hole]; CSS never lists Cursor classes here. */
+html[data-cursor-dream-skin="1"] [data-cursor-skin-hole] {
+  background: transparent !important;
+  background-color: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html[data-cursor-dream-skin="1"] [data-cursor-skin="terminal"] div {
   background: transparent !important;
   background-color: transparent !important;
 }
 
-html[data-cursor-dream-skin="1"] .editor-panel-container > hr,
-html[data-cursor-dream-skin="1"] [class*="editor-panel-container"] > hr {
-  background-color: transparent !important;
-}
-
-/* Diff / Changes — match main canvas: clear, no milky blur stack */
-html[data-cursor-dream-skin="1"] .diff-tab-content,
-html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-stable-diff"] {
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"],
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] {
   background-color: transparent !important;
   background-image: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  --vscode-editor-background: transparent !important;
+  --vscode-editorGutter-background: transparent !important;
+  --vscode-editorStickyScroll-background: transparent !important;
+  --vscode-diffEditor-insertedLineBackground: rgba(63, 162, 102, 0.07) !important;
+  --vscode-diffEditor-removedLineBackground: rgba(184, 0, 73, 0.07) !important;
+  --vscode-diffEditor-insertedTextBackground: rgba(63, 162, 102, 0.12) !important;
+  --vscode-diffEditor-removedTextBackground: rgba(184, 0, 73, 0.12) !important;
+}
+
+/* File cards + code plate: wallpaper shows through */
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .ui-card,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .ui-card__header,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .ui-default-diff,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .monaco-editor,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .monaco-editor-background,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="diff"] .monaco-diff-editor,
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-card,
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-card__header,
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-default-diff {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Full-row green/red washes look like a solid slab on glass — drop them.
+   Keep word-level inline tints so +/- is still obvious. */
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-default-diff__line {
+  background-color: transparent !important;
+}
+
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-default-diff__inline--added {
+  background-color: rgba(63, 162, 102, 0.18) !important;
+}
+
+html[data-cursor-dream-skin="1"] [data-component="diff-tab-content"] .ui-default-diff__inline--deleted {
+  background-color: rgba(184, 0, 73, 0.18) !important;
+  text-decoration: line-through;
 }
 
 /*
@@ -282,21 +302,8 @@ html[data-cursor-dream-skin="1"] [id*="tabpanel-editor-panel-group-stable-diff"]
  * (or covering it with opaque hosts) yields a black empty pane.
  */
 
-html[data-cursor-dream-skin="1"][data-cds-palette="1"] .editor-panel-container,
-html[data-cursor-dream-skin="1"][data-cds-palette="1"] [class*="editor-panel-container"] {
-  /* Keep Frost-driven tint even when a color style is active */
+html[data-cursor-dream-skin="1"][data-cds-palette="1"] [data-cursor-skin="auxiliary"] {
   background-color: var(--cds-editor-panel) !important;
-}
-
-html[data-cursor-dream-skin="1"] .glass-sidebar-header-actions-stack,
-html[data-cursor-dream-skin="1"] [class*="glass-sidebar-header"] {
-  background-color: transparent !important;
-}
-
-html[data-cursor-dream-skin="1"] .ui-sidebar,
-html[data-cursor-dream-skin="1"] nav.ui-sidebar {
-  background: transparent !important;
-  background-color: transparent !important;
 }
 
 /* Title strip + try to tint native Windows caption overlay via VS Code vars */
@@ -312,8 +319,7 @@ html[data-cursor-dream-skin="1"][data-cds-scheme="light"] {
   --vscode-titleBar-inactiveForeground: rgba(20, 20, 20, 0.55) !important;
 }
 
-html[data-cursor-dream-skin="1"] .glass-17fyfba,
-html[data-cursor-dream-skin="1"] body [class*="glass-78zum5"][class*="glass-2lah0s"][class*="glass-1qjc9v5"],
+html[data-cursor-dream-skin="1"] [data-cursor-skin="titlebar"],
 html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] {
   background-color: transparent !important;
   backdrop-filter: none !important;
@@ -321,11 +327,9 @@ html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
-html[data-cursor-dream-skin="1"][data-cds-scheme="dark"] [data-cds-titlebar="1"] {
-  background-color: transparent !important;
-}
-
-/* Right-side title actions (IDE button cluster) 鈥?no solid plate */
+html[data-cursor-dream-skin="1"] [data-cursor-skin="titlebar"] button,
+html[data-cursor-dream-skin="1"] [data-cursor-skin="titlebar"] [class*="ui-button"],
+html[data-cursor-dream-skin="1"] [data-cursor-skin="titlebar"] [class*="glass-"],
 html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] button,
 html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] [class*="ui-button"],
 html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] [class*="glass-"] {
@@ -333,19 +337,7 @@ html[data-cursor-dream-skin="1"] [data-cds-titlebar="1"] [class*="glass-"] {
   box-shadow: none !important;
 }
 
-/* Empty-state wrappers 鈥?clear so only the float chips show frost */
-html[data-cursor-dream-skin="1"] .agent-panel-empty-state-prompt,
-html[data-cursor-dream-skin="1"] .agent-panel-empty-state-footer-region,
-html[data-cursor-dream-skin="1"] .agent-panel-empty-state-footer-actions,
-html[data-cursor-dream-skin="1"] [class*="agent-panel-empty-state"] {
-  background: transparent !important;
-  background-color: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-
-/* Composer input 鈥?softer float (previous look) */
+/* Composer input — softer float (Cursor-specific polish, not a Theme hole) */
 html[data-cursor-dream-skin="1"] .ui-prompt-input__container,
 html[data-cursor-dream-skin="1"] [class*="ui-prompt-input__container"] {
   background-color: rgba(255, 255, 255, 0.14) !important;
@@ -488,40 +480,11 @@ html[data-cursor-dream-skin="1"] .monaco-workbench {
   background-image: none !important;
 }
 
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.sidebar,
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.activitybar {
-  background-color: color-mix(in srgb, var(--vscode-sideBar-background, #1e1e2e) calc(var(--cds-veil-sidebar) * 100%), transparent) !important;
-  backdrop-filter: var(--cds-frost);
-  -webkit-backdrop-filter: var(--cds-frost);
-}
-
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.auxiliarybar {
-  background-color: color-mix(in srgb, var(--vscode-sideBar-background, #1e1e2e) calc(var(--cds-veil-auxiliary) * 100%), transparent) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.editor,
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.editorgroupcontainer,
-html[data-cursor-dream-skin="1"] .monaco-workbench .editor-group-container {
-  background-color: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) calc(var(--cds-veil-editor) * 100%), transparent) !important;
-}
-
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.titlebar,
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.statusbar,
-html[data-cursor-dream-skin="1"] .monaco-workbench .part.panel {
+html[data-cursor-dream-skin="1"] .monaco-workbench [data-cursor-skin="statusbar"],
+html[data-cursor-dream-skin="1"] .monaco-workbench [data-cursor-skin="panel"] {
   background-color: color-mix(in srgb, var(--vscode-titleBar-activeBackground, #1e1e2e) 55%, transparent) !important;
   backdrop-filter: var(--cds-frost-soft);
   -webkit-backdrop-filter: var(--cds-frost-soft);
-}
-
-html[data-cursor-dream-skin="1"] .composer-bar,
-html[data-cursor-dream-skin="1"] [class*="composer-bar"],
-html[data-cursor-dream-skin="1"] [class*="full-input-box"],
-html[data-cursor-dream-skin="1"] .aichat-pane {
-  background-color: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) calc(var(--cds-veil-composer) * 100%), transparent) !important;
-  backdrop-filter: var(--cds-frost);
-  -webkit-backdrop-filter: var(--cds-frost);
 }
 
 html[data-cursor-dream-skin="1"] #cursor-dream-skin-root,
@@ -546,7 +509,7 @@ html[data-cursor-dream-skin="1"] #cursor-dream-skin-root * {
   pointer-events: auto !important;
   font-family: "Segoe UI", system-ui, sans-serif !important;
   width: max-content !important;
-  max-width: min(280px, calc(100vw - 24px)) !important;
+  max-width: min(300px, calc(100vw - 24px)) !important;
   box-sizing: border-box !important;
   user-select: none !important;
   /* Critical: do not participate in Electron native window drag / Windows snap */
@@ -562,10 +525,10 @@ html[data-cursor-dream-skin="1"] #cursor-dream-skin-root * {
 }
 
 #cursor-dream-skin-hud[data-collapsed="1"] {
-  width: auto !important;
+  width: max-content !important;
   min-width: 118px !important;
   height: 40px !important;
-  max-width: none !important;
+  max-width: 200px !important;
   padding: 3px !important;
   overflow: hidden !important;
 }
@@ -575,7 +538,7 @@ html[data-cursor-dream-skin="1"] #cursor-dream-skin-root * {
   width: max-content !important;
   min-width: 220px !important;
   height: auto !important;
-  max-width: min(280px, calc(100vw - 24px)) !important;
+  max-width: min(300px, calc(100vw - 24px)) !important;
 }
 
 #cursor-dream-skin-hud[data-dragging="1"] {
@@ -777,6 +740,11 @@ html[data-cursor-dream-skin="1"] #cursor-dream-skin-root * {
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
+}
+
+#cursor-dream-skin-hud .cds-ws-row {
+  padding: 2px 8px 4px !important;
+  gap: 4px !important;
 }
 
 #cursor-dream-skin-hud .cds-frost-head {

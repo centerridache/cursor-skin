@@ -1,46 +1,36 @@
-{
-  "schemaVersion": 2,
-  "id": "moss-night",
-  "name": "Moss Night",
-  "brandSubtitle": "CURSOR SKIN",
-  "tagline": "Deep green frost over the same sky.",
-  "wallpaper": {
-    "type": "image",
-    "src": "wallpaper/main.jpg"
-  },
-  "preview": "preview.jpg",
-  "appearance": "dark",
-  "baseTheme": "Cursor Dark",
-  "scheme": "dark",
-  "paletteId": "moss-night",
-  "frost": 55,
-  "environment": {
-    "opacity": 0.7,
-    "blur": 22
-  },
-  "sidebar": {
-    "opacity": 0.5
-  },
-  "chat": {
-    "glass": true
-  },
-  "editor": {
-    "transparent": true
-  },
-  "terminal": {
-    "glass": true
-  },
-  "art": {
-    "focusX": 0.72,
-    "focusY": 0.4,
-    "safeArea": "left",
-    "taskMode": "ambient"
-  },
-  "veil": {
-    "sidebar": 0.32,
-    "auxiliary": 0.3,
-    "editor": 0.36,
-    "composer": 0.26
-  },
-  "colors": null
-}
+{
+  "schemaVersion": 1,
+  "identity": {
+    "id": "moss-night",
+    "name": "Moss Night",
+    "version": "1.0.0",
+    "author": "cursor-skin",
+    "description": "Deep green frost over the same sky.",
+    "preview": "preview.jpg",
+    "tagline": "Deep green frost over the same sky.",
+    "brandSubtitle": "CURSOR SKIN"
+  },
+  "appearance": {
+    "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+    "baseTheme": "Cursor Dark",
+    "scheme": "dark",
+    "paletteId": "moss-night",
+    "frost": { "enabled": true, "opacity": 0.55, "blur": 22 },
+    "effects": { "glow": false, "vignette": false },
+    "art": {
+      "focusX": 0.72,
+      "focusY": 0.4,
+      "safeArea": "left",
+      "taskMode": "ambient"
+    }
+  },
+  "workspace": {
+    "sidebar": { "surface": { "opacity": 0.5, "blur": 14 } },
+    "editor": { "surface": { "opacity": 0.7, "blur": 4 }, "transparent": true },
+    "chat": { "surface": { "opacity": 0.52, "blur": 10 }, "glass": true },
+    "auxiliary": { "surface": { "opacity": 0.48, "blur": 12 } },
+    "terminal": { "surface": { "opacity": 0.65, "blur": 8 }, "glass": true }
+  },
+  "performance": { "tier": "balanced" }
+}
+

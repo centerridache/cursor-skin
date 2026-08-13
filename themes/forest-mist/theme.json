@@ -1,39 +1,36 @@
-{
-  "schemaVersion": 2,
-  "id": "forest-mist",
-  "name": "Forest Mist",
-  "brandSubtitle": "CURSOR SKIN",
-  "tagline": "Soft green haze for long focus blocks.",
-  "wallpaper": {
-    "type": "image",
-    "src": "wallpaper/main.jpg"
-  },
-  "preview": "preview.jpg",
-  "baseTheme": "Cursor Dark",
-  "scheme": "dark",
-  "paletteId": "matcha",
-  "frost": 48,
-  "environment": {
-    "opacity": 0.6,
-    "blur": 18
-  },
-  "sidebar": {
-    "opacity": 0.44
-  },
-  "chat": {
-    "glass": true
-  },
-  "editor": {
-    "transparent": true
-  },
-  "terminal": {
-    "glass": true
-  },
-  "art": {
-    "focusX": 0.7,
-    "focusY": 0.42,
-    "safeArea": "left",
-    "taskMode": "ambient"
-  },
-  "colors": null
-}
+{
+  "schemaVersion": 1,
+  "identity": {
+    "id": "forest-mist",
+    "name": "Forest Mist",
+    "version": "1.0.0",
+    "author": "cursor-skin",
+    "description": "Soft green haze for long focus blocks.",
+    "preview": "preview.jpg",
+    "tagline": "Soft green haze for long focus blocks.",
+    "brandSubtitle": "CURSOR SKIN"
+  },
+  "appearance": {
+    "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+    "baseTheme": "Cursor Dark",
+    "scheme": "dark",
+    "paletteId": "matcha",
+    "frost": { "enabled": true, "opacity": 0.48, "blur": 18 },
+    "effects": { "glow": false, "vignette": false },
+    "art": {
+      "focusX": 0.7,
+      "focusY": 0.42,
+      "safeArea": "left",
+      "taskMode": "ambient"
+    }
+  },
+  "workspace": {
+    "sidebar": { "surface": { "opacity": 0.44, "blur": 12 } },
+    "editor": { "surface": { "opacity": 0.72, "blur": 4 }, "transparent": true },
+    "chat": { "surface": { "opacity": 0.5, "blur": 10 }, "glass": true },
+    "auxiliary": { "surface": { "opacity": 0.46, "blur": 12 } },
+    "terminal": { "surface": { "opacity": 0.65, "blur": 8 }, "glass": true }
+  },
+  "performance": { "tier": "balanced" }
+}
+

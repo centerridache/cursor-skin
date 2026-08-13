@@ -31,20 +31,44 @@ Theme Community ---- Theme Creator ---- AI Generator
 
 ---
 
-## Phase 2 — Theme System（v0.3 · 当前）
+## Phase 2 — Theme System（v0.3）
 
 Theme = 工作空间状态描述（不只是壁纸配置）。
 
-- [x] Theme Schema v2（`theme.json` + wallpaper / preview / README）
-- [x] 加载器 normalize（v1 兼容 + v2 workspace 字段）
-- [x] 官方示例主题 5 个
-- [x] 文档契约 [THEME_SCHEMA.md](THEME_SCHEMA.md)
+- [x] Theme Contract 定型：`identity` / `appearance` / `workspace` / `performance`
+- [x] Workspace = semantic regions + `surface`（sidebar / editor / chat / auxiliary / terminal）
+- [x] JSON Schema + defaults + normalize（兼容旧扁平包）
+- [x] 官方示例主题 5 个（已迁到 Contract）
+- [x] 文档 [THEME_SCHEMA.md](THEME_SCHEMA.md)
+- [x] Theme Validator（`npm run theme:validate`）
+- [x] Theme Creator MVP（`npm run creator`）
 
 ---
 
-## Phase 3 — Theme Creator（v0.4）
+## Phase 2b — Theme Validator（完成）
 
-- 本地 Creator（预览 + 导出 `theme.zip`）
+- [x] `theme validate` CLI，与 Schema 共用 defaults / ranges / 资源上限
+- [x] 结构 / 类型 / 范围 / 资源存在性 / 性能警告
+
+---
+
+## Phase 2c — Adapter / CSS 解耦（完成）
+
+- [x] Theme 只表达语义；选择器仅在 `adapters/cursor/`
+- [x] 面板 Workspace 三滑块：Sidebar / Editor / Right 独立透明度
+- [x] Runtime 按 Adapter `regions` 打 `data-cursor-skin`
+- [x] 五块 Workspace 表面 CSS 走属性选择器 + 变量（见 [ADAPTER.md](ADAPTER.md)）
+- [x] Adapter `holes` + `data-cursor-skin-hole`（内层实心底挖洞）
+- [x] Adapter `mappings`：`surface.blur` → `--cds-frost-{region}`
+- [x] Chrome 区域：`titlebar` / `statusbar` / `panel` / `diff`
+
+---
+
+## Phase 3 — Theme Creator（v0.4 MVP）
+
+- [x] 本地 Creator（`npm run creator` → `http://127.0.0.1:3847/`）
+- [x] 与 Validator / Schema 共用 defaults、ranges、资源上限
+- [x] 预览语义 Workspace + 导入 / 校验 / 导出 `theme.zip`
 - 先不做复杂 GUI / 登录
 
 ---

@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/centerridache/cursor-skin/theme/schema/theme.schema.json",
+  "title": "Cursor Skin Theme Contract",
+  "description": "Canonical theme format: identity + appearance + workspace + performance. Themes never contain Cursor DOM selectors.",
+  "type": "object",
+  "required": ["schemaVersion", "identity", "appearance"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Theme Contract version. Always 1 for this nested format."
+    },
+    "identity": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "description": "Stable pack id; should match folder name"
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "default": "1.0.0"
+        },
+        "author": { "type": "string", "default": "" },
+        "description": { "type": "string", "default": "" },
+        "preview": {
+          "type": "string",
+          "description": "Relative path to preview image",
+          "default": "preview.jpg"
+        },
+        "tagline": { "type": "string" },
+        "brandSubtitle": { "type": "string" }
+      }
+    },
+    "appearance": {
+      "type": "object",
+      "required": ["wallpaper"],
+      "additionalProperties": false,
+      "properties": {
+        "wallpaper": {
+          "type": "object",
+          "required": ["src"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "enum": ["image", "video"], "default": "image" },
+            "src": { "type": "string", "minLength": 1 }
+          }
+        },
+        "baseTheme": {
+          "type": "string",
+          "enum": ["Cursor Dark", "Cursor Light", "Cursor Dark High Contrast"],
+          "default": "Cursor Dark"
+        },
+        "scheme": { "type": "string", "enum": ["dark", "light"], "default": "dark" },
+        "paletteId": {
+          "type": "string",
+          "description": "Named palette from assets/palettes.json; empty = none"
+        },
+        "palette": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Inline color tokens (accent, foreground, muted, …). Wins over paletteId when set."
+        },
+        "frost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+            "blur": { "type": "number", "minimum": 0, "maximum": 64 }
+          }
+        },
+        "effects": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "glow": { "type": "boolean", "default": false },
+            "vignette": { "type": "boolean", "default": false }
+          }
+        },
+        "art": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusX": { "type": "number", "minimum": 0, "maximum": 1 },
+            "focusY": { "type": "number", "minimum": 0, "maximum": 1 },
+            "safeArea": { "type": "string" },
+            "taskMode": { "type": "string" }
+          }
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Semantic Workspace regions only — never Cursor DOM selectors. Changes/Agent default under auxiliary until Adapter splits them.",
+      "properties": {
+        "sidebar": { "$ref": "#/$defs/workspaceRegion" },
+        "editor": { "$ref": "#/$defs/workspaceRegionEditor" },
+        "chat": { "$ref": "#/$defs/workspaceRegionChat" },
+        "auxiliary": { "$ref": "#/$defs/workspaceRegion" },
+        "terminal": { "$ref": "#/$defs/workspaceRegionChat" }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["lite", "balanced", "quality"],
+          "default": "balanced"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-region visual surface (extensible: tint / border later)",
+      "properties": {
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "blur": { "type": "number", "minimum": 0, "maximum": 64 },
+        "tint": { "type": "string", "description": "Optional color tint (future)" },
+        "border": { "type": "string", "description": "Optional border token (future)" }
+      }
+    },
+    "workspaceRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "surface": { "$ref": "#/$defs/surface" },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Compat alias → surface.opacity"
+        }
+      }
+    },
+    "workspaceRegionEditor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "surface": { "$ref": "#/$defs/surface" },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Compat alias → surface.opacity"
+        },
+        "transparent": {
+          "type": "boolean",
+          "description": "Compat shortcut: prefer lighter editor veil"
+        }
+      }
+    },
+    "workspaceRegionChat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "surface": { "$ref": "#/$defs/surface" },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Compat alias → surface.opacity"
+        },
+        "glass": {
+          "type": "boolean",
+          "description": "Compat shortcut: prefer glassier surface"
+        }
+      }
+    }
+  }
+}

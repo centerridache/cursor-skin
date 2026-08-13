@@ -85,6 +85,8 @@ CursorSkin.listThemes()
 
 - **收缩**：右下角芯片 `◐ Dream Skin`（可拖）
 - **展开**：点芯片；标题栏点 `Hide` 再缩回去
+- **Workspace**：Sidebar / Editor / Right 三个滑块，分别控左、中、右列透明度
+- **Frost**：只改全局模糊，不再一刀切改三列透明度
 - **拖动**：拖芯片或面板标题；不要拖到系统标题栏中间（已避开窗口吸附区）
 - **小窗**：缩窗口时会自动夹回可视区
 - **Skin packs**：列出 `themes/` 下包，一键应用壁纸 / frost / palette
@@ -106,7 +108,8 @@ CursorSkin.listThemes()
 
 ## Theme packs（主题包）
 
-把「工作空间氛围」收成可分享目录（Schema **v2**），放在 `themes/<id>/`。完整契约见 [THEME_SCHEMA.md](THEME_SCHEMA.md)。
+主题包遵循 **Theme Contract**（`identity` / `appearance` / `workspace` / `performance`）。  
+完整契约：[THEME_SCHEMA.md](THEME_SCHEMA.md) · JSON Schema：`theme/schema/theme.schema.json`
 
 ```text
 themes/
@@ -114,42 +117,47 @@ themes/
     theme.json
     preview.jpg
     wallpaper/
-      main.jpg         # 或 video
-    README.md          # 可选
+      main.jpg
+    README.md
 ```
 
-`theme.json`（v2）示例：
+`theme.json` 示例（缩略）：
 
 ```json
 {
-  "schemaVersion": 2,
-  "id": "my-pack",
-  "name": "My Pack",
-  "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
-  "preview": "preview.jpg",
-  "baseTheme": "Cursor Dark",
-  "scheme": "dark",
-  "paletteId": "moss-night",
-  "environment": { "opacity": 0.62, "blur": 16 },
-  "sidebar": { "opacity": 0.42 },
-  "chat": { "glass": true },
-  "editor": { "transparent": true },
-  "terminal": { "glass": true },
-  "art": { "focusX": 0.72, "focusY": 0.4 },
-  "colors": null
+  "schemaVersion": 1,
+  "identity": {
+    "id": "my-pack",
+    "name": "My Pack",
+    "version": "1.0.0",
+    "author": "you",
+    "description": "…",
+    "preview": "preview.jpg"
+  },
+  "appearance": {
+    "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+    "paletteId": "moss-night",
+    "frost": { "enabled": true, "opacity": 0.5, "blur": 16 }
+  },
+  "workspace": {
+    "sidebar": { "surface": { "opacity": 0.45, "blur": 12 } },
+    "editor": { "surface": { "opacity": 0.72, "blur": 4 } },
+    "chat": { "surface": { "opacity": 0.5, "blur": 10 } },
+    "auxiliary": { "surface": { "opacity": 0.45, "blur": 12 } },
+    "terminal": { "surface": { "opacity": 0.65, "blur": 8 } }
+  },
+  "performance": { "tier": "balanced" }
 }
 ```
 
 规则：
 
-- `wallpaper.src` 相对主题包目录；也可用根目录 `wallpaper.jpg`（legacy）
-- 显式 `frost` 优先于 `environment.blur` 推导
-- `paletteId` 引用 `assets/palettes.json`；内联 `colors` 优先
-- 运行时壳子仍在 `assets/`；injector 经 `theme-schema.mjs` normalize 后再 apply
-- 面板 **Skin packs** 扫描 `themes/*/theme.json`
-- `--themes-dir` 可改扫描根目录
-
-官方包：`default-atmosphere`、`moss-night`、`cyber-night`、`forest-mist`、`ink-minimal`。
+- Theme **不写** Cursor DOM 选择器（那是 Adapter）
+- `surface.blur` 由 Runtime 经 Adapter `mappings` 写成 `--cds-frost-*`
+- 加载经 `scripts/theme-schema.mjs` normalize 后再 apply
+- 旧扁平 schema 仍可加载；新包请只用 Contract
+- 官方包：`default-atmosphere`、`moss-night`、`cyber-night`、`forest-mist`、`ink-minimal`
+- 本地做包：`npm run creator`（见 [CREATOR.md](CREATOR.md)）
 
 ## 脚本分工（开源维护）
 
@@ -157,25 +165,30 @@ themes/
 
 - `scripts/install-launchers.ps1` — 装/卸桌面快捷方式  
 - `scripts/start-dream-skin.ps1` — 启动 Cursor + injector  
+- `npm run creator` — Theme Creator（本机 `http://127.0.0.1:3847/`）  
 - `scripts/restore-dream-skin.ps1` — 还原  
 - `scripts/verify-dream-skin.ps1` — 探测是否注入成功  
 
 **运行时（一般不用手点）**
 
-- `scripts/theme-schema.mjs` — Theme Schema v1/v2 normalize  
+- `scripts/theme-schema.mjs` — Theme Contract + legacy normalize  
+- `theme/schema/` — `theme.schema.json` + defaults  
+- `theme/validator/validate.mjs` — Theme 质量门槛（结构 / 类型 / 范围 / 资源）  
+- `scripts/theme-validate.mjs` — CLI：`npm run theme:validate -- themes/<id>`  
+- `scripts/creator-server.mjs` — Theme Creator：`npm run creator`  
 - `scripts/injector.mjs` — CDP 注入；event+health 守护  
 - `scripts/load-adapter.mjs` — 加载 `adapters/cursor/*.json`  
 - `scripts/media-server.mjs` — 本机 loopback 媒体  
 - `scripts/workshop-resolve.mjs` — Wallpaper Engine 目录解析  
 - `scripts/open-media-dialog.ps1` — 置顶文件/文件夹对话框  
 - `scripts/common-windows.ps1` — 公共 Windows 逻辑  
-- `adapters/cursor/default.json` — 选择器兼容层（Cursor DOM 变了优先改这里）  
+- `adapters/cursor/default.json` — Adapter（Cursor DOM 变了优先改 `regions` / `holes` / `selectors`）  
 
 **资源**
 
 - `assets/dream-skin.css` / `renderer-inject.js` / `palettes.json` / `theme.json`
-- `themes/<id>/` — Schema v2 主题包（见 [THEME_SCHEMA.md](THEME_SCHEMA.md)）
-- [RUNTIME_API.md](RUNTIME_API.md) / [ROADMAP.md](ROADMAP.md) / [THEME_SCHEMA.md](THEME_SCHEMA.md)
+- `themes/<id>/` — Theme Contract 包（见 [THEME_SCHEMA.md](THEME_SCHEMA.md)）
+- [CREATOR.md](CREATOR.md) / [ADAPTER.md](ADAPTER.md) / [RUNTIME_API.md](RUNTIME_API.md) / [ROADMAP.md](ROADMAP.md) / [THEME_SCHEMA.md](THEME_SCHEMA.md)
 
 ## 常见问题
 

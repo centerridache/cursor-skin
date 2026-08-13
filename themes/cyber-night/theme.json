@@ -1,38 +1,36 @@
-{
-  "schemaVersion": 2,
-  "id": "cyber-night",
-  "name": "Cyber Night",
-  "brandSubtitle": "CURSOR SKIN",
-  "tagline": "Cold cyan glow — late-night sessions.",
-  "wallpaper": {
-    "type": "image",
-    "src": "wallpaper/main.jpg"
-  },
-  "preview": "preview.jpg",
-  "baseTheme": "Cursor Dark",
-  "scheme": "dark",
-  "paletteId": "slate-glow",
-  "environment": {
-    "opacity": 0.58,
-    "blur": 20
-  },
-  "sidebar": {
-    "opacity": 0.4
-  },
-  "chat": {
-    "glass": true
-  },
-  "editor": {
-    "transparent": true
-  },
-  "terminal": {
-    "glass": true
-  },
-  "art": {
-    "focusX": 0.68,
-    "focusY": 0.38,
-    "safeArea": "left",
-    "taskMode": "ambient"
-  },
-  "colors": null
-}
+{
+  "schemaVersion": 1,
+  "identity": {
+    "id": "cyber-night",
+    "name": "Cyber Night",
+    "version": "1.0.0",
+    "author": "cursor-skin",
+    "description": "Cold cyan glow for late-night sessions.",
+    "preview": "preview.jpg",
+    "tagline": "Cold cyan glow — late-night sessions.",
+    "brandSubtitle": "CURSOR SKIN"
+  },
+  "appearance": {
+    "wallpaper": { "type": "image", "src": "wallpaper/main.jpg" },
+    "baseTheme": "Cursor Dark",
+    "scheme": "dark",
+    "paletteId": "slate-glow",
+    "frost": { "enabled": true, "opacity": 0.5, "blur": 20 },
+    "effects": { "glow": false, "vignette": true },
+    "art": {
+      "focusX": 0.68,
+      "focusY": 0.38,
+      "safeArea": "left",
+      "taskMode": "ambient"
+    }
+  },
+  "workspace": {
+    "sidebar": { "surface": { "opacity": 0.4, "blur": 14 } },
+    "editor": { "surface": { "opacity": 0.7, "blur": 4 }, "transparent": true },
+    "chat": { "surface": { "opacity": 0.48, "blur": 10 }, "glass": true },
+    "auxiliary": { "surface": { "opacity": 0.42, "blur": 12 } },
+    "terminal": { "surface": { "opacity": 0.62, "blur": 8 }, "glass": true }
+  },
+  "performance": { "tier": "balanced" }
+}
+

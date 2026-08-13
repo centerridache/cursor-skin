@@ -329,8 +329,12 @@ function loadThemePackFromDir(dir) {
     name: norm.name,
     dir,
     schemaVersion: norm.schemaVersion,
+    format: norm.format || "",
     tagline: norm.tagline,
     brandSubtitle: norm.brandSubtitle,
+    author: norm.author || "",
+    description: norm.description || "",
+    themeVersion: norm.themeVersion || "1.0.0",
     wallpaperType: type,
     wallpaperPath: wallPath,
     previewPath: fs.existsSync(previewPath) ? previewPath : wallPath,
@@ -340,7 +344,10 @@ function loadThemePackFromDir(dir) {
     frost: norm.frost,
     art: norm.art,
     veil: norm.veil,
+    surfaces: norm.surfaces || null,
     colors: norm.colors,
+    effects: norm.effects || null,
+    performance: norm.performance || { tier: "balanced" },
     workspace: norm.workspace,
   };
 }
@@ -373,9 +380,13 @@ function themePackCatalog(packs) {
   return (packs || []).map((p) => ({
     id: p.id,
     name: p.name,
-    tagline: p.tagline || "",
+    tagline: p.tagline || p.description || "",
     scheme: p.scheme || "dark",
     schemaVersion: p.schemaVersion || 1,
+    format: p.format || "",
+    author: p.author || "",
+    version: p.themeVersion || "1.0.0",
+    performance: p.performance?.tier || "balanced",
   }));
 }
 
@@ -972,6 +983,11 @@ function makeApplyConfig(themeBundle, extra = {}) {
     posterKey: "",
     posterDataUrl: "",
     selectors: themeBundle.selectors || {},
+    regions: themeBundle.regions || {},
+    regionAttr: themeBundle.regionAttr || "data-cursor-skin",
+    holes: themeBundle.holes || [],
+    mappings: themeBundle.mappings || {},
+    holeAttr: themeBundle.holeAttr || "data-cursor-skin-hole",
     runtimeVersion: themeBundle.runtimeVersion || "0.3.0",
     ...extra,
     art: extra.art || themeBundle.theme.art || {},
@@ -982,6 +998,23 @@ function makeApplyConfig(themeBundle, extra = {}) {
       extra.selectors && typeof extra.selectors === "object"
         ? extra.selectors
         : themeBundle.selectors || {},
+    regions:
+      extra.regions && typeof extra.regions === "object"
+        ? extra.regions
+        : themeBundle.regions || {},
+    regionAttr:
+      typeof extra.regionAttr === "string" && extra.regionAttr
+        ? extra.regionAttr
+        : themeBundle.regionAttr || "data-cursor-skin",
+    holeAttr:
+      typeof extra.holeAttr === "string" && extra.holeAttr
+        ? extra.holeAttr
+        : themeBundle.holeAttr || "data-cursor-skin-hole",
+    holes: Array.isArray(extra.holes) ? extra.holes : themeBundle.holes || [],
+    mappings:
+      extra.mappings && typeof extra.mappings === "object"
+        ? extra.mappings
+        : themeBundle.mappings || {},
     resetWallpaper,
     skipMediaReload: extra.skipMediaReload === true,
     // If custom already on screen and this payload has no custom URLs, don't fall back to default-only.
@@ -1168,6 +1201,11 @@ async function main() {
   const adapter = loadAdapter(args.adapterPath);
   let themeBundle = readTheme(args.themeDir, null);
   themeBundle.selectors = adapter.selectors;
+  themeBundle.regions = adapter.regions;
+  themeBundle.regionAttr = adapter.attr;
+  themeBundle.holes = adapter.holes;
+  themeBundle.mappings = adapter.mappings;
+  themeBundle.holeAttr = adapter.holeAttr;
   themeBundle.runtimeVersion = "0.3.0";
   log(
     `adapter=${adapter.id} cursor=${adapter.cursorVersion}${adapter.path ? " file=" + path.basename(adapter.path) : ""}`
@@ -1183,12 +1221,14 @@ async function main() {
   let packCustomOverride = !!savedPackState.customOverride;
   let packArt = null;
   let packVeil = null;
+  let packSurfaces = null;
   let packFrost;
   let packInlineColors = null;
   const bootPack = findThemePack(themePacks, currentThemePackId);
   if (bootPack) {
     packArt = bootPack.art;
     packVeil = bootPack.veil;
+    packSurfaces = bootPack.surfaces || null;
     if (typeof bootPack.frost === "number") packFrost = bootPack.frost;
     if (bootPack.colors) packInlineColors = bootPack.colors;
   }
@@ -1276,9 +1316,15 @@ async function main() {
     themePackId: packCustomOverride ? "" : currentThemePackId,
     art: packArt || undefined,
     veil: packVeil || undefined,
+    surfaces: packSurfaces || undefined,
     frost: packFrost,
     paletteTokens: packInlineColors || undefined,
     selectors: adapter.selectors,
+    regions: adapter.regions,
+    regionAttr: adapter.attr,
+    holes: adapter.holes,
+    mappings: adapter.mappings,
+    holeAttr: adapter.holeAttr,
     runtimeVersion: "0.3.0",
     ...more,
   });
@@ -1336,6 +1382,11 @@ async function main() {
   const bindBundle = (bundle) => {
     themeBundle = bundle;
     themeBundle.selectors = adapter.selectors;
+    themeBundle.regions = adapter.regions;
+    themeBundle.regionAttr = adapter.attr;
+    themeBundle.holes = adapter.holes;
+    themeBundle.mappings = adapter.mappings;
+    themeBundle.holeAttr = adapter.holeAttr;
     themeBundle.runtimeVersion = "0.3.0";
   };
 
@@ -1346,6 +1397,7 @@ async function main() {
 
   async function processQueuedRequests(reqs, list) {
     let needFullReapply = false;
+    let forceWorkspace = false;
     for (const req of reqs) {
       if (req.type === "theme" && req.themeId) {
         currentThemeId = req.themeId;
@@ -1421,6 +1473,7 @@ async function main() {
           packCustomOverride = false;
           packArt = pack.art;
           packVeil = pack.veil;
+          packSurfaces = pack.surfaces || null;
           packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
           packInlineColors = pack.colors || null;
           currentThemeId = pack.baseTheme || "Cursor Dark";
@@ -1500,6 +1553,7 @@ async function main() {
             customOverride: false,
           });
           needFullReapply = true;
+          forceWorkspace = true;
           log(`theme-pack -> ${pack.id}`);
         } catch (e) {
           log(`theme-pack fail: ${e.message || e}`);
@@ -1615,6 +1669,7 @@ async function main() {
             packCustomOverride = false;
             packArt = pack.art;
             packVeil = pack.veil;
+            packSurfaces = pack.surfaces || null;
             packFrost = typeof pack.frost === "number" ? pack.frost : undefined;
             writeActiveThemePack(args.stateDir, {
               packId: pack.id,
@@ -1637,6 +1692,7 @@ async function main() {
           packCustomOverride = false;
           packArt = null;
           packVeil = null;
+          packSurfaces = null;
           packFrost = undefined;
           packInlineColors = null;
           writeActiveThemePack(args.stateDir, { packId: "", customOverride: false });
@@ -1648,6 +1704,7 @@ async function main() {
     if (needFullReapply) {
       await reapplyAll(list, args.port, themeBundle, buildExtra({
         resetWallpaper: !videoUrl && !imageUrl && wallpaperLabel === "Default",
+        forceWorkspace,
       }));
     }
   }

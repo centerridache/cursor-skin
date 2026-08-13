@@ -11,7 +11,7 @@
 > 非官方项目，与 Anysphere / Cursor 无关。  
 > **v0.3（early / WIP）**：Theme Schema v2 + 官方主题包；选择器仍可能随 Cursor 更新失效，请先用测试窗试用。
 
-文档：[使用](docs/USAGE.md) · [Theme Schema](docs/THEME_SCHEMA.md) · [Runtime API](docs/RUNTIME_API.md) · [路线图](docs/ROADMAP.md) · [媒体](docs/MEDIA.md) · [安全](docs/SECURITY.md)
+文档：[使用](docs/USAGE.md) · [Theme Schema](docs/THEME_SCHEMA.md) · [Theme Creator](docs/CREATOR.md) · [Runtime API](docs/RUNTIME_API.md) · [路线图](docs/ROADMAP.md) · [媒体](docs/MEDIA.md) · [安全](docs/SECURITY.md)
 
 ---
 
@@ -23,7 +23,7 @@ Cursor Skin 是面向 **Cursor IDE** 的轻量视觉定制层。
 
 不是「再贴一张背景图」那么简单，而是一套可切换、可还原的 **皮肤运行时（Theme Runtime）**。  
 v0.2 起提供稳定门面 `window.CursorSkin`（见 [docs/RUNTIME_API.md](docs/RUNTIME_API.md)）。  
-v0.3 起主题包遵循 [Theme Schema v2](docs/THEME_SCHEMA.md)（工作空间状态：environment / sidebar / chat / editor）。
+v0.3 起主题包遵循 [Theme Contract](docs/THEME_SCHEMA.md)（`identity` / `appearance` / `workspace` / `performance`）。
 
 ### 官方主题包
 
@@ -165,14 +165,13 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 - **启动比普通 Cursor 慢**：脚本要开调试端口并注入皮肤  
 - **大尺寸视频首次加载偏慢**（需进 blob）  
 - **动态壁纸偶发停播**（非最小化也会停）— 正在排查  
-- **部分 UI 无法完全透明**（Electron / 原生层限制），例如 Agents Browser 网页内容、**Changes / Diff** 常仍不透明  
+- **部分 UI 无法完全透明**（Electron / 原生层限制），例如 Agents Browser 网页内容  
 - **Cursor 大版本更新后** 选择器可能失效，需再适配  
 
 其它：
 
 | 问题 | 说明 | 状态 |
 |------|------|------|
-| **Changes / Diff 仍不透明** | 右侧 Changes 常被实心底挡住壁纸 | 待修 |
 | **启动白闪** | 注入完成前可能先闪主题底色 | 后续再改 |
 | **Agents Terminal 字体发虚** | xterm 透壁纸后对比度可能不够 | 已知权衡 |
 | **小窗→最大化重影** | 偶发右侧半透明重影 | 偶发 |
@@ -188,18 +187,17 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 
 ### v0.3（当前）
 
-- Theme Schema **v2**（工作空间描述）+ 官方 5 主题  
-- Schema normalize（兼容 v1 包）  
-- CDP 运行时注入 + **事件驱动轻量守护**（`event+health`）  
-- 公开 **`window.CursorSkin`** Runtime API  
-- Cursor **selector adapter**（`adapters/cursor/`）  
-- 静图 / GIF / 视频壁纸、毛玻璃、部分 WE 导入  
+- **Theme Contract** 定型（identity / appearance / workspace / performance）  
+- `theme/schema/` + normalize（兼容旧扁平包）  
+- **Theme Validator**：`npm run theme:validate`  
+- **Theme Creator**：`npm run creator`（本地预览 + 导出 `theme.zip`）  
+- 官方 5 主题  
+- CDP event+health 守护、`window.CursorSkin`  
+- Adapter `regions` / `holes` / `mappings` → `data-cursor-skin` + `surface.blur`；CSS 只写属性 
 
-### 下一步（v0.4+）
+### 下一步
 
-- Theme Creator（本地预览 + 导出 zip）  
-- 动态壁纸稳定性（停播、加载）与启动体验  
-- 社区主题仓库；Web Wallpaper；其它 Electron IDE（远期）  
+- 动态壁纸稳定性；社区主题仓库  
 
 ---
 
@@ -207,10 +205,12 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 
 ```text
 assets/      CSS、注入脚本、默认素材、配色
-adapters/   Cursor 版本选择器兼容层
-themes/     可分享主题包（theme.json + 壁纸）
-scripts/    启动 / 还原 / injector / 快捷方式
-docs/       使用、Runtime API、路线图、媒体、安全
+adapters/   Cursor Adapter（regions + holes + mappings）
+theme/      Theme Contract（schema + validator + defaults）
+creator/    Theme Creator（本地 Web App）
+themes/     官方 / 本地主题包
+scripts/    启动 / 还原 / injector / theme-schema / theme-validate / creator-server
+docs/       使用、Theme Contract、Runtime API、路线图
 tools/      可选 RePKG（解 WE scene.pkg）
 package.json  version 0.3.0
 ```
