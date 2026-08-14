@@ -269,6 +269,7 @@ html[data-cursor-dream-skin="1"] [data-cursor-skin="editor"] {
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="terminal"] {
+  --terminal-bg: transparent !important;
   background-color: var(--cds-terminal-panel, transparent) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -292,6 +293,7 @@ html[data-cursor-dream-skin="1"] [data-cursor-skin-hole] {
 }
 
 html[data-cursor-dream-skin="1"] [data-cursor-skin="terminal"] div {
+  --terminal-bg: transparent !important;
   background: transparent !important;
   background-color: transparent !important;
 }
@@ -364,6 +366,33 @@ html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [data-cursor-skin
 html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] {
   --vscode-panel-background: transparent !important;
   --vscode-editorPane-background: transparent !important;
+  --vscode-editor-background: transparent !important;
+}
+
+/* Unnavigated Browser paints a solid empty-state plate (#181818) over the hole.
+   Keep it scoped to tool-pane=browser so Chat/Agent empty states stay frosted.
+   A real URL unmounts this node; the native WebContentsView then shows its own page. */
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [data-component="tab-empty-state"],
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="browser"] [data-component="tab-empty-state"] * {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Terminal first-paint plate: Cursor inlines --terminal-bg:#141414 / rgb(20,20,20)
+   before the region stamp and xterm frost land. Override the var so the canvas
+   does not fill opaque, without waiting for Adapter. */
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-component="terminal-tab-content"],
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-component="terminal-tab-content"] * {
+  --terminal-bg: transparent !important;
+  --vscode-terminal-background: transparent !important;
+}
+
+html[data-cursor-dream-skin="1"][data-cds-tool-pane="terminal"] [data-component="terminal-tab-content"] [style*="--terminal-bg"] {
+  background-color: transparent !important;
 }
 
 /* Title strip + try to tint native Windows caption overlay via VS Code vars */

@@ -15,6 +15,12 @@ import { createMediaServer } from "./media-server.mjs";
 import { resolveWallpaperInput, findRepkgExe } from "./workshop-resolve.mjs";
 import { loadAdapter } from "./load-adapter.mjs";
 import { normalizeThemePack, isVideoPath } from "./theme-schema.mjs";
+import { runDrainEvaluate, runProbeEvaluate } from "./injector-eval.mjs";
+import {
+  createNewDocumentRegistry,
+  replaceNewDocumentOnSession,
+  shouldRegisterNewDocument,
+} from "./injector-new-document.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,6 +31,7 @@ const MAX_VIDEO_BYTES = 8 * 1024 * 1024 * 1024; // mp4/webm streamed in place (n
 const WALLPAPER_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const VIDEO_EXTS = new Set([".mp4", ".webm"]);
 const mediaServer = createMediaServer();
+const newDocumentScripts = createNewDocumentRegistry();
 
 function parseArgs(argv) {
   const out = {
@@ -802,27 +809,6 @@ function buildApplyExpression(payload, config) {
   })()`;
 }
 
-function buildDrainExpression(payload) {
-  // Re-eval when payload version changes so slider/handlers are not stuck on stale closures.
-  return `(() => {
-    try {
-      const src = ${JSON.stringify(payload)};
-      const verMatch = /const VERSION\\s*=\\s*(\\d+)/.exec(src);
-      const want = verMatch ? Number(verMatch[1]) : 0;
-      const have =
-        window.__cursorDreamSkin && typeof window.__cursorDreamSkin.version === "number"
-          ? window.__cursorDreamSkin.version
-          : 0;
-      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.drainRequests !== "function" || have !== want) {
-        (0, eval)(src);
-      }
-      if (!window.__cursorDreamSkin || !window.__cursorDreamSkin.drainRequests) return [];
-      return window.__cursorDreamSkin.drainRequests();
-    } catch (e) {
-      return [];
-    }
-  })()`;
-}
 
 function buildMarkAppearanceExpression(payload, { themeId, scheme, paletteId, wallpaperLabel }) {
   return `(() => {
@@ -866,19 +852,6 @@ function buildRemoveExpression(payload) {
   })()`;
 }
 
-function buildProbeExpression(payload) {
-  return `(() => {
-    try {
-      if (!window.__cursorDreamSkin || typeof window.__cursorDreamSkin.probe !== "function") {
-        const src = ${JSON.stringify(payload)};
-        (0, eval)(src);
-      }
-      return window.__cursorDreamSkin.probe();
-    } catch (e) {
-      return { ok: false, error: String(e && e.message || e) };
-    }
-  })()`;
-}
 
 function buildEarlyScript(payload, config) {
   return `${payload}
@@ -1059,16 +1032,20 @@ async function injectTarget(target, port, themeBundle, mode, extraConfig = {}) {
       return await session.evaluate(buildRemoveExpression(themeBundle.injectSource));
     }
     if (mode === "verify") {
-      return await session.evaluate(buildProbeExpression(themeBundle.injectSource));
+      return await runProbeEvaluate((expr) => session.evaluate(expr), themeBundle.injectSource);
     }
     if (mode === "drain") {
-      return await session.evaluate(buildDrainExpression(themeBundle.injectSource));
+      return await runDrainEvaluate((expr) => session.evaluate(expr), themeBundle.injectSource);
     }
 
     const early = buildEarlyScript(themeBundle.injectSource, config);
-    await session
-      .send("Page.addScriptToEvaluateOnNewDocument", { source: early })
-      .catch(() => {});
+    if (shouldRegisterNewDocument(mode) && target.id) {
+      try {
+        await replaceNewDocumentOnSession(newDocumentScripts, session, target.id, early);
+      } catch {
+        /* NewDocument is best-effort; this document still gets apply() below. */
+      }
+    }
     const result = await session.evaluate(
       buildApplyExpression(themeBundle.injectSource, config)
     );
@@ -1169,6 +1146,7 @@ async function reapplyAll(list, port, themeBundle, extra) {
 
 async function appearanceAll(list, port, themeBundle, extra) {
   // Theme/palette only: refresh tint + scheme, do not reload wallpaper media.
+  // Does not register a NewDocument script (current page evaluate only).
   for (const page of list) {
     try {
       if (!isLoopbackWs(page.webSocketDebuggerUrl, port)) continue;
@@ -1758,6 +1736,7 @@ async function main() {
           missStreak.delete(id);
         }
       }
+      newDocumentScripts.forgetMissing(live);
       writeState(args.stateDir, {
         pid: process.pid,
         port: args.port,
@@ -1843,10 +1822,13 @@ async function main() {
     discoverSession = await connectTargetDiscovery(args.port, (reason, info) => {
       if (reason === "destroyed") {
         const id = info?.targetId;
-        if (id && seen.has(id)) {
-          seen.delete(id);
-          missStreak.delete(id);
-          log(`target destroyed ${id}`);
+        if (id) {
+          newDocumentScripts.forget(id);
+          if (seen.has(id)) {
+            seen.delete(id);
+            missStreak.delete(id);
+            log(`target destroyed ${id}`);
+          }
         }
         return;
       }

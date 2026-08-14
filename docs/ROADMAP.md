@@ -63,6 +63,15 @@ Theme = 工作空间状态描述（不只是壁纸配置）。
 
 ---
 
+## Phase 2d — Injector / 工具窗（完成）
+
+- [x] Drain / probe：短 CDP 表达式（匹配 VERSION 才调 API；否则回退整包）
+- [x] `Page.addScriptToEvaluateOnNewDocument` 按 target 去重（apply 才注册；destroyed / drain 时 forget）
+- [x] Browser 空页 `tab-empty-state` 打穿；真实网址用原生网页底
+- [x] Terminal 首帧 `--terminal-bg` 覆盖 + 有限 rAF frost（无常驻 200ms）
+
+---
+
 ## Phase 3 — Theme Creator（暂缓）
 
 本地可视化编辑 / 导入导出 `theme.zip` 先不做。手写 `theme.json` + `npm run theme:validate`。

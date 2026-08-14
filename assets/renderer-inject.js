@@ -7,7 +7,7 @@
   const ROOT_ID = "cursor-dream-skin-root";
   const STYLE_ID = "cursor-dream-skin-css";
   const HUD_ID = "cursor-dream-skin-hud";
-  const VERSION = 62;
+  const VERSION = 63;
   const RUNTIME_VERSION = "0.3.0";
   const PANEL_V = "18";
   const REGION_ATTR = "data-cursor-skin";
@@ -1259,9 +1259,32 @@
       }
       if (mode) html.setAttribute("data-cds-tool-pane", mode);
       else html.removeAttribute("data-cds-tool-pane");
+      if (mode === "terminal") armTerminalFrostOnce();
     } catch (_) {
       /* ignore */
     }
+  }
+
+  /** Bounded rAF: frost xterm as soon as it mounts. No interval. */
+  function armTerminalFrostOnce() {
+    if (global.__cdsTermFrostArmed) return;
+    global.__cdsTermFrostArmed = 1;
+    let n = 0;
+    const step = function () {
+      if (global.__cdsToolPaneGen !== VERSION) {
+        global.__cdsTermFrostArmed = 0;
+        return;
+      }
+      frostTerminalSurface();
+      n += 1;
+      const ready = !!document.querySelector(".xterm") && !xtermNeedsFrost();
+      if (ready || n >= 20) {
+        global.__cdsTermFrostArmed = 0;
+        return;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   function findXtermInstance() {

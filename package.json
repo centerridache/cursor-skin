@@ -9,7 +9,8 @@
     "verify": "node scripts/injector.mjs --verify",
     "probe": "node scripts/probe-dom.mjs",
     "theme:validate": "node scripts/theme-validate.mjs",
-    "test:theme": "node --test theme/validator/validate.test.mjs"
+    "test:theme": "node --test theme/validator/validate.test.mjs",
+    "test:injector": "node --test scripts/injector-eval.test.mjs scripts/injector-new-document.test.mjs"
   },
   "engines": {
     "node": ">=18"

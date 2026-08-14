@@ -61,7 +61,7 @@ v0.3 起主题包遵循 [Theme Contract](docs/THEME_SCHEMA.md)（`identity` / `a
 
 - 左侧栏 / 对话区 / 右侧栏统一透明度滑条（Frost）  
 - 壁纸可从半透明层透出  
-- 部分区域受 Electron 限制仍不透（见 [已知问题](#已知问题)）
+- 部分区域受 Electron 限制仍不透（已打开的 **Browser 网页**用站点自己的底；**空页**已透壁纸，见 [已知问题](#已知问题)）
 
 ### 主题系统
 
@@ -172,13 +172,15 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 - **启动比普通 Cursor 慢**：脚本要开调试端口并注入皮肤  
 - **大尺寸视频首次加载偏慢**（需进 blob）  
 - **动态壁纸偶发停播**（非最小化也会停）— 正在排查  
-- **部分 UI 无法完全透明**（Electron / 原生层限制），例如 Agents Browser 网页内容  
+- **已打开的真实网页**仍用站点自己的底（原生 WebContentsView，不强制透明）  
 - **Cursor 大版本更新后** 选择器可能失效，需再适配  
 
 其它：
 
 | 问题 | 说明 | 状态 |
 |------|------|------|
+| **Browser 空页黑屏** | 未输入网址时的 empty-state 实心底 | **已修**（透壁纸；输入网址后用网页底） |
+| **打开 Terminal 闪黑** | 首帧 `--terminal-bg: #141414` 盖住壁纸 | **已修**（CSS 覆盖 + 有限帧 rAF frost，无 200ms 循环） |
 | **启动白闪** | 注入完成前可能先闪主题底色 | 后续再改 |
 | **Agents Terminal 字体发虚** | xterm 透壁纸后对比度可能不够 | 已知权衡 |
 | **小窗→最大化重影** | 偶发右侧半透明重影 | 偶发 |
@@ -201,7 +203,40 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 - CDP event+health 守护、`window.CursorSkin`  
 - Adapter `regions` / `holes` / `mappings` → `data-cursor-skin`；CSS 只写属性  
 - Runtime：按需 Tool Pane heal、Region untagged probe（不再 1.2s 全量扫 DOM）  
+- Injector drain / probe 走短 CDP 表达式；`Page.addScriptToEvaluateOnNewDocument` 按 target 去重  
+- Browser 空页 / Terminal 首帧实心底打穿  
 - Theme Creator 本地 GUI **暂缓**（手写 `theme.json` 即可）
+
+### 本轮做了什么
+
+| 项 | 做了什么 | 优化 |
+|----|----------|------|
+| **Drain / Probe** | 正常路径只调页面上已有的 `drainRequests()` / `probe()` | 每次约 **370 B**，不再把整包 `renderer-inject.js`（约 106 KB）塞进 CDP |
+| **NewDocument** | 每个 workbench target 只保留一条注入脚本 | 连续 apply 时先 remove 再 add，避免 iframe/子文档重复跑 payload |
+| **Browser 空页** | 只打 `tab-empty-state`，不动 `.webview-browser-container` | 没网址时透壁纸；输入真实网址后用网页自己的背景 |
+| **Terminal 闪黑** | 覆盖 `--terminal-bg`，xterm 出现后最多约 20 帧 rAF frost | 不再加常驻 200ms shield |
+
+```mermaid
+flowchart LR
+  drain["drain ~2s"] --> check{"页面 API 版本匹配?"}
+  check -->|是| short["短表达式 ~370 B"]
+  check -->|否 / 抛错| fallback["回退 eval 整包 ~106 KB"]
+  short --> api["drainRequests / probe"]
+  fallback --> api
+```
+
+```mermaid
+flowchart TD
+  apply["apply 当前页"] --> nd["NewDocument 注册"]
+  nd --> rm{"该 target 已有 identifier?"}
+  rm -->|有| remove["remove 旧脚本"]
+  rm -->|无| add["add 新脚本"]
+  remove --> add
+  add --> map["只记成功后的 identifier"]
+  gone["targetDestroyed / 不在 live 列表"] --> forget["forget，不泄漏"]
+```
+
+Injector 单测：`npm run test:injector`（短表达式不含 payload；10 次 apply → 10 add / 9 remove / 1 条有效 id）。
 
 ### 近期 Runtime / Contract（摘要）
 
@@ -209,6 +244,28 @@ powershell -NoProfile -File scripts\restore-dream-skin.ps1
 - Adapter 作为静态 Region/Hole 的唯一来源；health 只记录 Region miss，不自动 re-apply  
 - Validator 补齐 tagline / art.safeArea 等字段；未知字段与未知 workspace region 为 **error**；禁止键递归进 array  
 - 去掉 Theme Creator（`npm run creator`）
+
+### 空闲探测（约 10s，页面内）
+
+Region stamp 不再定时全量扫 DOM。约 10 秒采样（含约 9 次 host timer）：
+
+| 指标 | 次数 |
+|------|------|
+| host timer | 9 |
+| `hasUntaggedTarget` probe | 9 |
+| `querySelector` | 504 |
+| 全量 `tagAdapterRegions` | **0** |
+| MutationObserver flush | **0** |
+| 自己的 root / HUD 触发全量 stamp | **0** |
+
+```mermaid
+flowchart LR
+  t["host timer 9"] --> p["untagged probe 9"]
+  p --> q["querySelector 504"]
+  q --> z["全量 stamp 0 · MO flush 0"]
+```
+
+`querySelector` 来自「只查第一个匹配」的 untagged probe，不是整树 stamp。
 
 ### 性能（约 5 秒实机采样）
 
@@ -235,7 +292,7 @@ assets/      CSS、注入脚本、默认素材、配色
 adapters/   Cursor Adapter（regions + holes + mappings）
 theme/      Theme Contract（schema + validator + defaults）
 themes/     官方 / 本地主题包
-scripts/    启动 / 还原 / injector / theme-schema / theme-validate
+scripts/    启动 / 还原 / injector（含 drain 短表达式、NewDocument 去重）/ theme-schema / theme-validate
 docs/       使用、Theme Contract、Runtime API、路线图
 tools/      可选 RePKG（解 WE scene.pkg）
 package.json  version 0.3.0
